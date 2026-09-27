@@ -1,0 +1,64 @@
+{
+  "name": "pdf2hwp-grid",
+  "source_sha256": "82a159d8b393747ff956e7a57ca16927e782a16231af2038bd9e5d771ecbcdc5",
+  "source_package": "source.hwpx",
+  "native_hwpx_sha256": "333a837e8a2391a98ee8728990710bc5508ef13232947febbaa39a4799cf896a",
+  "question_layout": "merged_grid",
+  "page_chrome": "source_merged_grid",
+  "grid_rows": 6,
+  "fields": {
+    "school": {
+      "source_text": "{학교이름}"
+    },
+    "year": {
+      "source_text": "{년도}"
+    },
+    "exam_title": {
+      "source_text": "{시험지제목}"
+    }
+  },
+  "paper_mm": [
+    210.00155555555554,
+    296.9965555555555
+  ],
+  "side_margins_mm": [
+    12.8,
+    12.8
+  ],
+  "column_gap_mm": 3.6,
+  "first_body_top_mm": 34,
+  "body_top_mm": 11.5,
+  "body_bottom_margin_mm": 12,
+  "body_font": "한컴 윤고딕 720",
+  "body_font_pt": 8.0,
+  "body_char_id": "16",
+  "body_para_id": "17",
+  "body_align": "LEFT",
+  "equation_font_pt": 8,
+  "box_font": "한컴 윤고딕 720",
+  "box_font_pt": 8,
+  "line_spacing_pct": 160,
+  "box_stroke_mm": 0.12,
+  "box_padding_mm": [
+    2,
+    1.5,
+    2,
+    1.5
+  ],
+  "box_title_placement": "inside",
+  "scope": "Actual pdf2HWP template first/continuation page tables; six logical rows per column merged into question cells.",
+  "files": {
+    "source.hwpx": "333a837e8a2391a98ee8728990710bc5508ef13232947febbaa39a4799cf896a",
+    "base/mimetype": "5ab5230b5af04f78947736bf8dd1a269aa684e234f7f4a392efb85289d1655c2",
+    "base/settings.xml": "e7ac4746036df80d7fc943b49de83563b592356aa0eecd2e77a1098e8425d31b",
+    "base/version.xml": "b10ad732aa5995269dfdf5219b3f00d6028912f3edcef17a47f20f74842b6533",
+    "base/Contents/content.hpf": "417dce36457662fccb9225aed03198d78dde2803d4fa08de3f18b8ef558950a0",
+    "base/Contents/header.xml": "de51bf279bcada1e3b76b817815e761acef7c63ea19d96e123cc35abba07fe8f",
+    "base/Contents/section0.xml": "bb086159822b13026539e5def99472dcd2c5e353f165b7af0fa2f887fba352e5",
+    "base/META-INF/container.rdf": "0cfd814c20595c841e48e62fbf7591829f13c177fa92af634c8199f85ecf3a89",
+    "base/META-INF/container.xml": "5109d3a9249ec1058177fedab574c5d9616058aa92ebefcd33249ebb36a20f61",
+    "base/META-INF/manifest.xml": "2b4b155c1bb6a9ccc212fef113c4831d2f558e67cf1260eb314ce54f26fd32ea",
+    "base/Scripts/headerScripts.js": "f23abe459e32a899af2081e05752afe193fb00489405be94799b3658b7d5688f"
+  },
+  "source_label": "pdf2hwp-grid original HWP (provenance only; runtime uses bundled source_package)"
+}

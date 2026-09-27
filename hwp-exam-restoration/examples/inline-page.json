@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "page_number": 1,
+  "size_mm": [
+    210,
+    297
+  ],
+  "assignment_id": "synthetic-page-001",
+  "worker_id": "synthetic-worker-001",
+  "issues": [],
+  "regions": [
+    {
+      "id": "left",
+      "bbox_mm": [
+        12,
+        25,
+        89,
+        257
+      ],
+      "question_ids": [
+        "q1",
+        "q2",
+        "q3"
+      ]
+    },
+    {
+      "id": "right",
+      "bbox_mm": [
+        109,
+        25,
+        89,
+        257
+      ],
+      "question_ids": [
+        "q4",
+        "q5"
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "q1",
+      "region_id": "left",
+      "bbox_mm": [
+        12,
+        25,
+        89,
+        65
+      ]
+    },
+    {
+      "id": "q2",
+      "region_id": "left",
+      "bbox_mm": [
+        12,
+        105,
+        89,
+        65
+      ]
+    },
+    {
+      "id": "q3",
+      "region_id": "left",
+      "bbox_mm": [
+        12,
+        190,
+        89,
+        80
+      ]
+    },
+    {
+      "id": "q4",
+      "region_id": "right",
+      "bbox_mm": [
+        109,
+        25,
+        89,
+        100
+      ]
+    },
+    {
+      "id": "q5",
+      "region_id": "right",
+      "bbox_mm": [
+        109,
+        155,
+        89,
+        115
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "id": "header",
+      "question_id": null,
+      "kind": "text",
+      "bbox_mm": [
+        35,
+        10,
+        150,
+        7
+      ],
+      "text": "구조 계약 예시 · 실제 시험지 원본이 아님",
+      "font_pt": 12,
+      "font_family": "바탕"
+    },
+    {
+      "id": "divider",
+      "question_id": null,
+      "kind": "rule",
+      "bbox_mm": [
+        104.94,
+        25,
+        0.12,
+        257
+      ],
+      "stroke_mm": 0.12
+    },
+    {
+      "id": "q1-text",
+      "question_id": "q1",
+      "kind": "text",
+      "bbox_mm": [
+        12,
+        25,
+        80,
+        6
+      ],
+      "text": "1. 다음 조건을 만족시키는 값을 구하시오.",
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "q1-box",
+      "question_id": "q1",
+      "kind": "box",
+      "bbox_mm": [
+        14,
+        39,
+        85,
+        27
+      ],
+      "title": "〈보 기〉",
+      "title_bbox_mm": [
+        47,
+        36.5,
+        19,
+        5
+      ],
+      "stroke_mm": 0.12,
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "q1-label",
+      "question_id": "q1",
+      "kind": "text",
+      "bbox_mm": [
+        17,
+        47,
+        7,
+        5
+      ],
+      "text": "ㄱ.",
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "q1-equation",
+      "question_id": "q1",
+      "kind": "equation",
+      "bbox_mm": [
+        25,
+        46,
+        27,
+        7
+      ],
+      "latex": "f(x)=x^2-1",
+      "font_pt": 10.5
+    },
+    {
+      "id": "q2-text",
+      "question_id": "q2",
+      "kind": "text",
+      "bbox_mm": [
+        12,
+        105,
+        82,
+        6
+      ],
+      "text": "2. 주어진 식을 간단히 하시오.",
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "q3-text",
+      "question_id": "q3",
+      "kind": "text",
+      "bbox_mm": [
+        12,
+        190,
+        82,
+        6
+      ],
+      "text": "3. 풀이 과정을 서술하시오.",
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "q4-text",
+      "question_id": "q4",
+      "kind": "text",
+      "bbox_mm": [
+        109,
+        25,
+        82,
+        6
+      ],
+      "text": "4. 그래프의 성질을 설명하시오.",
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "q5-text",
+      "question_id": "q5",
+      "kind": "text",
+      "bbox_mm": [
+        109,
+        155,
+        82,
+        6
+      ],
+      "text": "5. 모든 해를 구하고 근거를 쓰시오.",
+      "font_pt": 10.5,
+      "font_family": "바탕"
+    },
+    {
+      "id": "mixed-line",
+      "question_id": "q2",
+      "kind": "line",
+      "bbox_mm": [
+        12,
+        115,
+        85,
+        12
+      ],
+      "font_pt": 10.5,
+      "font_family": "바탕",
+      "runs": [
+        {
+          "kind": "text",
+          "text": "원의 중심은 "
+        },
+        {
+          "kind": "equation",
+          "latex": "(a,b)"
+        },
+        {
+          "kind": "text",
+          "text": "이고 반지름은 "
+        },
+        {
+          "kind": "equation",
+          "latex": "\\frac{3}{2}"
+        },
+        {
+          "kind": "text",
+          "text": "이다."
+        }
+      ]
+    },
+    {
+      "id": "circle-line",
+      "question_id": "q3",
+      "kind": "line",
+      "bbox_mm": [
+        12,
+        210,
+        89,
+        12
+      ],
+      "font_pt": 9.5,
+      "font_family": "바탕",
+      "runs": [
+        {
+          "kind": "text",
+          "text": "원의 방정식은 "
+        },
+        {
+          "kind": "equation",
+          "latex": "x^2+y^2+6x-4y-3=0"
+        },
+        {
+          "kind": "text",
+          "text": "이다."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "version":2,"source_sha256":"0000000000000000000000000000000000000000000000000000000000000000",
+  "page_number":1,"size_mm":[210,297],"assignment_id":"synthetic-example-only","worker_id":"example-not-a-real-agent","issues":[],
+  "regions":[{"id":"left","bbox_mm":[15,30,85,240],"question_ids":["q1"]}],
+  "questions":[{"id":"q1","region_id":"left","bbox_mm":[15,30,85,110],"font_pt":10.5,"font_family":"바탕","content":[
+    {"id":"q1-body","kind":"paragraph","runs":[{"kind":"text","text":"1. 다음 조건을 만족하는 "},{"kind":"equation","latex":"x"},{"kind":"text","text":"의 값을 구하시오."}]},
+    {"id":"q1-given","kind":"box","title":"〈조 건〉","before_mm":3,"after_mm":3,"content":[{"id":"q1-condition","kind":"paragraph","runs":[{"kind":"equation","latex":"\\frac{x}{2}=3"}]}]},
+    {"id":"q1-options","kind":"choices","columns":3,"rows":[[[{"kind":"text","text":"① "},{"kind":"equation","latex":"2"}],[{"kind":"text","text":"② "},{"kind":"equation","latex":"4"}],[{"kind":"text","text":"③ "},{"kind":"equation","latex":"6"}]]]}]}],
+  "blocks":[{"id":"header","question_id":null,"kind":"text","bbox_mm":[15,15,80,7],"text":"합성 예제 — 실제 원본 아님","font_pt":10,"font_family":"바탕"}]
+}

@@ -1,0 +1,38 @@
+% Engine-owned annotation primitives. Inlined into each helper-using document.
+\usetikzlibrary{decorations.markings}
+
+% B is the corner; the caller must confirm a right-angle mark in the source.
+\newcommand{\ExamRightAngle}[4][]{%
+  \pic[draw,angle radius=2mm,#1] {right angle=#2--#3--#4};%
+}
+
+% Left bend relative to A->B; no arrowheads unless explicitly requested.
+\newcommand{\ExamLengthArc}[4][]{%
+  \draw[dashed,bend left=18,#1] (#2) to
+    node[midway,fill=white,inner sep=.6pt] {#4} (#3);%
+}
+
+% Explicit placement, not an automatic collision solver. Never hides lines.
+\newcommand{\ExamLabel}[3][above right]{%
+  \node[inner sep=2pt,outer sep=0pt,#1] at (#2) {#3};%
+}
+
+% Midpoint ticks in the local direction of AB; does not draw the segment.
+\newcommand{\ExamTicks}[4][]{%
+  \begingroup
+  \ifnum#4<1\relax
+    \PackageError{exam-marks}{ExamTicks count must be 1, 2 or 3}{Use one of these counts.}%
+  \else\ifnum#4>3\relax
+    \PackageError{exam-marks}{ExamTicks count must be 1, 2 or 3}{Use one of these counts.}%
+  \else
+    \path[postaction={decorate},decoration={markings,
+      mark=at position .5 with {%
+        \foreach \ExamTickIndex in {1,...,#4}{%
+          \draw[line width=.4pt,#1]
+            ({(\ExamTickIndex-(#4+1)/2)*2.2pt},-1.8pt) --
+            ({(\ExamTickIndex-(#4+1)/2)*2.2pt},1.8pt);%
+        }%
+      }}] (#2)--(#3);%
+  \fi\fi
+  \endgroup
+}

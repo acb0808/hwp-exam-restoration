@@ -1,0 +1,1669 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "latex-to-hwpeqn/editor-document/v1"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "parsed",
+        "error"
+      ]
+    },
+    "source": {
+      "type": "string"
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "text"
+              },
+              "source": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "display": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "source",
+              "start",
+              "end",
+              "display"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "math"
+              },
+              "source": {
+                "type": "string"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "display": {
+                "type": "boolean"
+              },
+              "equation": {
+                "$ref": "#/$defs/equation"
+              }
+            },
+            "required": [
+              "kind",
+              "source",
+              "start",
+              "end",
+              "display",
+              "equation"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "rendering_verified": {
+      "const": false
+    },
+    "requires_editor_acknowledgement": {
+      "const": true
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning"
+            ]
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "column": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "start",
+          "end",
+          "severity",
+          "line",
+          "column"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "span_unit": {
+      "const": "unicode_codepoint"
+    },
+    "editor_action": {
+      "enum": [
+        "review_required",
+        "fix_input"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "ok",
+    "status",
+    "source",
+    "segments",
+    "rendering_verified",
+    "requires_editor_acknowledgement",
+    "diagnostics",
+    "span_unit",
+    "editor_action"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "empty",
+            "literal",
+            "atom",
+            "text",
+            "style_declaration",
+            "seq",
+            "group",
+            "frac",
+            "atop",
+            "binom",
+            "root",
+            "scripts",
+            "overset",
+            "accent",
+            "font",
+            "math_alphabet",
+            "modulo",
+            "prefix",
+            "relation",
+            "delimited",
+            "row",
+            "environment"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "empty"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "empty"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "literal"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "literal"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "atom"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "atom"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "text"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "style_declaration"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "style_declaration"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "seq"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "seq"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                }
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "group"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "group"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "frac"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "frac"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "atop"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "atop"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "binom"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "binom"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "root"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "root"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "scripts"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "scripts"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "overset"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "overset"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "accent"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "accent"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "font"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "font"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "math_alphabet"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "math_alphabet"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "modulo"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "modulo"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "prefix"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "prefix"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "relation"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "relation"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "value",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "delimited"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "delimited"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "left": {
+                "type": "string"
+              },
+              "right": {
+                "type": "string"
+              },
+              "children": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "left",
+              "right",
+              "children"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "row"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "row"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "cells": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/node"
+                },
+                "minItems": 1
+              },
+              "after_spacing": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string",
+                    "pattern": "^[+-]?(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)$"
+                  },
+                  "unit": {
+                    "enum": [
+                      "pt",
+                      "bp",
+                      "mm",
+                      "cm",
+                      "in",
+                      "em",
+                      "ex",
+                      "mu",
+                      "pc",
+                      "dd",
+                      "cc",
+                      "sp"
+                    ]
+                  },
+                  "semantics": {
+                    "const": "extra"
+                  }
+                },
+                "required": [
+                  "value",
+                  "unit",
+                  "semantics"
+                ],
+                "additionalProperties": false
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "cells"
+            ],
+            "additionalProperties": false
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "environment"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "const": "environment"
+              },
+              "source_command": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "column_alignment": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "left",
+                    "center",
+                    "right"
+                  ]
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/node"
+                    },
+                    {
+                      "properties": {
+                        "type": {
+                          "const": "row"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "minItems": 1
+              },
+              "command_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "type",
+              "name",
+              "column_alignment",
+              "rows"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "diagnostic": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ]
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "start",
+        "end",
+        "severity",
+        "line",
+        "column"
+      ],
+      "additionalProperties": false
+    },
+    "equation": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "latex-to-hwpeqn/editor-equation/v1"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "parsed",
+            "error"
+          ]
+        },
+        "source": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "latex"
+            },
+            "text": {
+              "type": "string"
+            },
+            "span_unit": {
+              "const": "unicode_codepoint"
+            }
+          },
+          "required": [
+            "format",
+            "text",
+            "span_unit"
+          ],
+          "additionalProperties": false
+        },
+        "tree": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/node"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "feature": {
+                "enum": [
+                  "tree_v1",
+                  "environment",
+                  "extra_row_spacing",
+                  "style_declaration",
+                  "math_alphabet",
+                  "font",
+                  "math_style",
+                  "tex_spacing",
+                  "fallback_review"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "column_alignment": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "left",
+                    "center",
+                    "right"
+                  ]
+                }
+              },
+              "value": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              },
+              "semantics": {
+                "const": "extra"
+              },
+              "command": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "source_span": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "end": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              },
+              "status": {
+                "const": "unverified"
+              }
+            },
+            "required": [
+              "feature",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "requires_editor_acknowledgement": {
+          "const": true
+        },
+        "rendering_verified": {
+          "const": false
+        },
+        "fallback_policy": {
+          "const": "explicit_review"
+        },
+        "fallback": {
+          "type": "object",
+          "properties": {
+            "latex": {
+              "type": "string"
+            },
+            "ok": {
+              "type": "boolean"
+            },
+            "hwpeqn": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/diagnostic"
+              }
+            },
+            "rendering_verified": {
+              "const": false
+            },
+            "status": {
+              "enum": [
+                "converted",
+                "review_required",
+                "error"
+              ]
+            }
+          },
+          "required": [
+            "latex",
+            "ok",
+            "hwpeqn",
+            "error",
+            "diagnostics",
+            "rendering_verified",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/diagnostic"
+          }
+        },
+        "editor_action": {
+          "enum": [
+            "review_required",
+            "fix_input"
+          ]
+        }
+      },
+      "required": [
+        "schema",
+        "ok",
+        "status",
+        "source",
+        "tree",
+        "requirements",
+        "requires_editor_acknowledgement",
+        "rendering_verified",
+        "fallback_policy",
+        "fallback",
+        "diagnostics",
+        "editor_action"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ok": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "parsed"
+              },
+              "tree": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "status": {
+                "const": "error"
+              },
+              "tree": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+.venv/
+.mcp-venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+.env.*
+runs/
+output/
+backups/
+*.log

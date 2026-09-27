@@ -1,0 +1,202 @@
+{
+  "schema": "restoration-runtime-snapshot/1",
+  "files": [
+    {
+      "path": "hwp_automation/scripts/hwpx_builder.py",
+      "source": "hwp-automation/scripts/hwpx_builder.py",
+      "sha256": "d79963c757f58fb11a16cf904ad82488482c960e3293ce2753f13aec665a7644"
+    },
+    {
+      "path": "hwp_automation/scripts/equation_converter.py",
+      "source": "hwp-automation/scripts/equation_converter.py",
+      "sha256": "0d34af0ea875b8f76dfde0ca97f845cba49c5321e09e83c82d1711592e0792ff"
+    },
+    {
+      "path": "hwp_automation/scripts/hwp_units.py",
+      "source": "hwp-automation/scripts/hwp_units.py",
+      "sha256": "a782cffae50614efb6f3572ed24f39eaa81fad97519362e8c08fb91f6115b53f"
+    },
+    {
+      "path": "hwp_automation/scripts/callout_validation.py",
+      "source": "hwp-automation/scripts/callout_validation.py",
+      "sha256": "5b210c37e6a31f0a78ebb554a7ce540fb1c63799c31272f5a2f0e3621d35d886"
+    },
+    {
+      "path": "hwp_automation/scripts/xml_spans.py",
+      "source": "hwp-automation/scripts/xml_spans.py",
+      "sha256": "d5f48001955d0dd1b0824ef76a11b27432488940fe744df93e1035631d2db81c"
+    },
+    {
+      "path": "hwp_automation/scripts/native_layout.py",
+      "source": "hwp-automation/scripts/native_layout.py",
+      "sha256": "8116a47104dfb99939423766c33908dd9bbea4675ba1d4b061ef6f848badba81",
+      "local_modifications": "Preserve existing Antigravity bounded Windows replace retry: 50 attempts, 0.05 second interval. Mark preflight-only blocked receipts as no_session_started; remove marker before any native worker launch."
+    },
+    {
+      "path": "hwp_automation/scripts/native_layout_worker.py",
+      "source": "hwp-automation/scripts/native_layout_worker.py",
+      "sha256": "1ad9264922b77456c7d87fd2415f7030db94c00d0923429dd037f69197fbeb7a"
+    },
+    {
+      "path": "hwp_automation/scripts/layout_measure.py",
+      "source": "hwp-automation/scripts/layout_measure.py",
+      "sha256": "09bb874c583d69120f1771d90dc2edd503c4101860795029ba5faa23f5735adb"
+    },
+    {
+      "path": "hwp_automation/scripts/inspect_hwpx.py",
+      "source": "hwp-automation/scripts/inspect_hwpx.py",
+      "sha256": "85bfc79f22344a985ddcbbdd697ff48549db6f80eb6310d05fb41d9c50f71e6b"
+    },
+    {
+      "path": "hwp_automation/template_base/Contents/content.hpf",
+      "source": "hwp-automation/template_base/Contents/content.hpf",
+      "sha256": "37cb06ceb4c566a369982d7599176b272cec4a1a243a335b16028864074f1137"
+    },
+    {
+      "path": "hwp_automation/template_base/Contents/header.xml",
+      "source": "hwp-automation/template_base/Contents/header.xml",
+      "sha256": "e6db9089396fbaab32a5b3793a2bf839213253b185b563da7c8ff039c483f850"
+    },
+    {
+      "path": "hwp_automation/template_base/Contents/section0.xml",
+      "source": "hwp-automation/template_base/Contents/section0.xml",
+      "sha256": "af044a7b006519f125cb493ebe3ab6fdb101d049b5b22c1f816afa479b1829c1"
+    },
+    {
+      "path": "hwp_automation/template_base/META-INF/container.rdf",
+      "source": "hwp-automation/template_base/META-INF/container.rdf",
+      "sha256": "0cfd814c20595c841e48e62fbf7591829f13c177fa92af634c8199f85ecf3a89"
+    },
+    {
+      "path": "hwp_automation/template_base/META-INF/container.xml",
+      "source": "hwp-automation/template_base/META-INF/container.xml",
+      "sha256": "5109d3a9249ec1058177fedab574c5d9616058aa92ebefcd33249ebb36a20f61"
+    },
+    {
+      "path": "hwp_automation/template_base/META-INF/manifest.xml",
+      "source": "hwp-automation/template_base/META-INF/manifest.xml",
+      "sha256": "2b4b155c1bb6a9ccc212fef113c4831d2f558e67cf1260eb314ce54f26fd32ea"
+    },
+    {
+      "path": "hwp_automation/template_base/mimetype",
+      "source": "hwp-automation/template_base/mimetype",
+      "sha256": "5ab5230b5af04f78947736bf8dd1a269aa684e234f7f4a392efb85289d1655c2"
+    },
+    {
+      "path": "hwp_automation/template_base/Preview/PrvImage.png",
+      "source": "hwp-automation/template_base/Preview/PrvImage.png",
+      "sha256": "2e5e7f3da4c7d5abb293d8acb25e7ad2e44b934fbe0c21dc52a30adab652a174"
+    },
+    {
+      "path": "hwp_automation/template_base/Preview/PrvText.txt",
+      "source": "hwp-automation/template_base/Preview/PrvText.txt",
+      "sha256": "d4cacef5e321c3e9c53c3d8f3993d3de88e1e14479b7a8a2907d233a7e23c46e"
+    },
+    {
+      "path": "hwp_automation/template_base/Scripts/headerScripts.js",
+      "source": "hwp-automation/template_base/Scripts/headerScripts.js",
+      "sha256": "f23abe459e32a899af2081e05752afe193fb00489405be94799b3658b7d5688f"
+    },
+    {
+      "path": "hwp_automation/template_base/Scripts/sourceScripts.js",
+      "source": "hwp-automation/template_base/Scripts/sourceScripts.js",
+      "sha256": "b183762f7dbf29e929380375746fa20260925f89cbfa284a29cf7ab611b8f77a"
+    },
+    {
+      "path": "hwp_automation/template_base/settings.xml",
+      "source": "hwp-automation/template_base/settings.xml",
+      "sha256": "16bf9c0b06184dac820c5a410b366d634afc64435ed369170135ba65f8250a55"
+    },
+    {
+      "path": "hwp_automation/template_base/version.xml",
+      "source": "hwp-automation/template_base/version.xml",
+      "sha256": "b10ad732aa5995269dfdf5219b3f00d6028912f3edcef17a47f20f74842b6533"
+    },
+    {
+      "path": "restoration_equations.py",
+      "source": "hwp-exam-studio/scripts/exam_studio/equations.py",
+      "sha256": "043286eb0b5bb462bba04631c9255ed13f8dd6129f4aa5dc5cedd079e0d6cca2",
+      "local_modifications": "Preserve original conversion diagnostics on EquationError for public lossless validation errors; no parser acceptance changes."
+    },
+    {
+      "path": "latex_to_hwpeqn/__init__.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/__init__.py",
+      "sha256": "c604e93380347d090685a8872977342c130e697a9457a03ddf09c1adba5fd752"
+    },
+    {
+      "path": "latex_to_hwpeqn/__main__.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/__main__.py",
+      "sha256": "6f84baf07f4a5545d9a7f52b74bdd17ec0c6689b3b7e4546c2a675e2cd9e6e5a"
+    },
+    {
+      "path": "latex_to_hwpeqn/document.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/document.py",
+      "sha256": "d3446e67c708ec43214cf50c097c6f3951e0bb9a2f2947e1c955aff18cd9238a"
+    },
+    {
+      "path": "latex_to_hwpeqn/editor.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/editor.py",
+      "sha256": "d30e872fac316e2a84fcbaad596b1caedfe76447ef86e8487eb0461a754b49ff"
+    },
+    {
+      "path": "latex_to_hwpeqn/model.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/model.py",
+      "sha256": "3168b02d20e6abf603c0f3a97011b275dd45a7af0e03d1ce609910d449c3e994"
+    },
+    {
+      "path": "latex_to_hwpeqn/parser.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/parser.py",
+      "sha256": "58d47df3363047ba81a3e248053582986ac294d3734de4fdae426b00400f2ff1"
+    },
+    {
+      "path": "latex_to_hwpeqn/renderer.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/renderer.py",
+      "sha256": "7fec1537f8d0a7619c0c0ba84ed6df0ddf9f0d733fa4a62d8d9c4c8525d20114"
+    },
+    {
+      "path": "latex_to_hwpeqn/symbols.py",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/symbols.py",
+      "sha256": "33d4a80c699b2281679c25ad1fa7d186142d17fde0ec92a649a74f381c4b5e82"
+    },
+    {
+      "path": "latex_to_hwpeqn/schemas/editor-document-v1.schema.json",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/schemas/editor-document-v1.schema.json",
+      "sha256": "0bc949b7b9331ecaf32988e5a4867c5e3e6726b52ac955fb8f8b2b6efe8ffb24"
+    },
+    {
+      "path": "latex_to_hwpeqn/schemas/editor-equation-v1.schema.json",
+      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/schemas/editor-equation-v1.schema.json",
+      "sha256": "021682c05e142688bcf5588e20045fa1b73bf16cbb1b00b89ec90177fc4844f8"
+    },
+    {
+      "path": "native/src/academy/__init__.py",
+      "source": "using-math-edu/runtime/src/academy/__init__.py",
+      "sha256": "b0f39e8b038c1a7d46e316914221ff0d1b5b444b59f39db95f375659ceded781"
+    },
+    {
+      "path": "native/src/academy/documents/__init__.py",
+      "source": "using-math-edu/runtime/src/academy/documents/__init__.py",
+      "sha256": "02a9611d90f1994dd64a3632478677486950ac95d89c4f357edd7958b0c84070"
+    },
+    {
+      "path": "native/src/academy/documents/hwp_adapter.py",
+      "source": "using-math-edu/runtime/src/academy/documents/hwp_adapter.py",
+      "sha256": "af8b242e5e21ff66e272af8e430c27232c2f86174516079711f6a28a81c36c78"
+    },
+    {
+      "path": "native/src/academy/documents/hwp_desktop.py",
+      "source": "using-math-edu/runtime/src/academy/documents/hwp_desktop.py",
+      "sha256": "4d0c7e0f504b123b2a87f29018e8a6c8b9765f6a082ecb6f246a7ee5f1101d07"
+    },
+    {
+      "path": "native/src/academy/documents/locks.py",
+      "source": "using-math-edu/runtime/src/academy/documents/locks.py",
+      "sha256": "a79446e1cf71c2752f5de03a84668a58b6dbddc657d71f3b1ddb805c7160b339"
+    },
+    {
+      "path": "tikz_render.py",
+      "source": "diagram-restoration/scripts/tikz_render.py",
+      "sha256": "5fb64bad0654d6d45efed73e1d6f38e784ec22433dfab9b08c57db4d857f4c83"
+    }
+  ]
+}

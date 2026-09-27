@@ -1,0 +1,17 @@
+% Synthetic render probe; not a reconstruction of any user's exam.
+\documentclass[tikz,border=2mm]{standalone}
+\usepackage{amsmath}
+\usetikzlibrary{angles,quotes}
+\begin{document}
+\begin{tikzpicture}[line width=0.35pt,font=\small]
+\coordinate (A) at (0,0);
+\coordinate (B) at (3,0);
+\coordinate (C) at (0,2);
+\draw (A)--(B)--(C)--cycle;
+\node[below left] at (A) {$A$};
+\node[below right] at (B) {$B$};
+\node[above] at (C) {$C$};
+\draw (0.2,0)--(0.2,0.2)--(0,0.2);
+\path (A)--node[below] {$\frac{3}{2}$} (B);
+\end{tikzpicture}
+\end{document}
