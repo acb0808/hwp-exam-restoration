@@ -224,8 +224,8 @@ def invalidate_output(state):
     if state.get('native_run'): state['output_stale']=True
     state['reviews']={};state.pop('review_notes',None)
 
-# Review severity: only issues that change what a student reads or answers trigger a repair round.
-# Diagram differences and cosmetic ones are recorded for the human checker on the 검수 노트 page.
+# Review severity: only math/answer-affecting discrepancies trigger a repair round.
+# Harmless OCR wording and diagram/cosmetic differences go to the 검수 노트 page.
 REPAIR_TAGS=('누락','오독','선지','잘림','정답')
 NOTE_TAGS=('도형','경미')
 PASSING=('passed','passed_with_notes')

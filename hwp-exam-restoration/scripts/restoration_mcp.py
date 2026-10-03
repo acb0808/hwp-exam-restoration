@@ -109,7 +109,7 @@ class PageReview(BaseModel):
     model_config = ConfigDict(extra='forbid')
     page: Page = Field(description='Page ID from review_tasks, including the final answer sheet ID.')
     status: Literal['passed', 'passed_with_notes', 'failed'] = Field(description='Reviewer verdict after comparing the entire source and final page; the engine recomputes it from issue tags.')
-    issues: list[str] = Field(description='Each observed difference starts with one tag: 누락/오독/선지/잘림/정답 (repair) or 도형/경미 (note only). Untagged issues count as repairs. Empty only if none remain.')
+    issues: list[str] = Field(description='Tag each difference: 누락/오독/선지/잘림/정답 only when math facts, conditions, requested result, choice scope, or answer are affected; 도형/경미 for notes. Harmless OCR wording differences are 경미, not repairs. Untagged issues count as repairs.')
 
 
 def _failure(message: str, next_action: str) -> CallToolResult:
@@ -270,7 +270,7 @@ async def hwp_finish_review(job: Nonempty, reviewer_id: Nonempty, reviews: list[
                             review_evidence: Nonempty | None = None,
                             review_evidence_path: Nonempty | None = None,
                             spawn_evidence: Evidence | None = None) -> CallToolResult:
-    """Record passed AND failed pages before repairs. Prefer review_evidence_path: the reviewer's UTF-8 report at the returned report_path, listing every reviewed source/reference/output/figure_sheet path. First round: spawn_evidence is the unmodified reviewer spawn/task response showing reviewer_id (then the report needs no ID line). Supply exactly one evidence text/path. No master rewriting. Issues are tagged 누락/오독/선지/잘림/정답 (repair) or 도형/경미 (note); a page's second failed verdict becomes unresolved notes. notes_build_required: call hwp_build once more to add the 검수 노트 page."""
+    """Record passed AND failed pages before repairs. Prefer review_evidence_path: the reviewer's UTF-8 report at the returned report_path, listing every reviewed source/reference/output/figure_sheet path. First round: spawn_evidence is the unmodified reviewer spawn/task response showing reviewer_id (then the report needs no ID line). Supply exactly one evidence text/path. No master rewriting. Use repair tags 누락/오독/선지/잘림/정답 only for discrepancies affecting math facts, conditions, requested result, choice scope, or answer; wording-only OCR differences without those effects use 경미. Diagram differences use 도형. A page's second failed verdict becomes unresolved notes. notes_build_required: call hwp_build once more to add the 검수 노트 page."""
     if (review_evidence is None)==(review_evidence_path is None):
         return _failure('exactly_one_review_evidence_text_or_path_required','Use the existing reviewer report path only; do not regenerate the report.')
     if review_evidence_path is not None:
