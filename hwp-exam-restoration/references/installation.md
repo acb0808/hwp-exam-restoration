@@ -32,9 +32,36 @@ py -3.12 -m venv .mcp-venv
 
 등록기는 기존 `~/.gemini/config/mcp_config.json`을 정확히 백업한 뒤 `hwp-restoration` 서버만 추가/갱신하며 다른 서버 설정을 보존한다. TeX가 PATH에 없으면 `--engine`에 실제 실행 파일 경로를 준다. `--dry-run`은 변경 없이 검사한다. 같은 backup에 `--rollback --dry-run`으로 복구 가능 여부를, `--rollback`으로 실제 복구를 수행한다. 설치 후 변경된 설정은 덮어쓰지 않는다.
 
+### OpenCode에 연결
+
+OpenCode는 Antigravity와 다른 설정 파일을 사용한다. 위 `install_mcp_server.py`는 Antigravity용이므로 OpenCode 설정에 실행하지 않는다. 먼저 OpenCode 설정 파일 `%USERPROFILE%\.config\opencode\opencode.json`을 백업하고, 기존 `mcp` 객체의 다른 서버를 유지하면서 아래 항목을 합친다. `<SKILL>`은 실제 설치 폴더의 절대 경로로 바꾼다. JSON 문자열의 `\`는 `\\`로 쓴다.
+
+```json
+{
+  "mcp": {
+    "hwp-restoration": {
+      "type": "local",
+      "command": [
+        "<SKILL>\\.mcp-venv\\Scripts\\python.exe",
+        "-B",
+        "-X",
+        "utf8",
+        "<SKILL>\\scripts\\restoration_mcp.py"
+      ],
+      "cwd": "<SKILL>\\scripts",
+      "environment": { "PYTHONUTF8": "1" },
+      "enabled": true,
+      "timeout": 15000
+    }
+  }
+}
+```
+
+이 블록을 기존 설정에 병합한 뒤 OpenCode를 다시 시작하고 `opencode mcp list`에서 `hwp-restoration connected`를 확인한다. 설정 파일이 `opencode.jsonc`라서 주석이 있으면 JSON 도구로 통째로 다시 저장하지 말고, 기존 주석과 항목을 보존해 직접 병합한다. OpenCode는 사용자 스킬 폴더 `~/.agents/skills/hwp-exam-restoration/SKILL.md`도 검색한다. 스킬 폴더가 다른 곳이면 앱의 스킬 경로 설정이나 해당 호스트의 공식 스킬 경로를 따른다.
+
 재검수 상한은 MCP 서버 env의 `HWP_MAX_REREVIEWS`로 정한다(쪽마다 재검수 횟수, 기본 1). 상한을 넘겨 다시 실패한 지적은 수정 회차 없이 `미해결`로 검수 노트에 남는다. 0이면 첫 실패를 바로 노트로 남긴다.
 
-업데이트 후 Antigravity의 해당 MCP 서버를 재연결한다. 새 채팅이나 도구 목록 갱신만으로 실행 중 Python 코드가 교체됐다고 판단하지 않는다. 첫 hwp_prepare 응답의 runtime_version=2.7.9로 실제 로드된 구현을 확인한다. 별도 상태 조회는 필요 없다. 서버 등록·별도 stdio 검사 성공은 현재 채팅의 연결 갱신을 보장하지 않는다. 제작자는 자기 페이지의 제출·렌더·도형 검수를 직접 MCP로 처리하고 메인은 준비·배정·빌드·최종 검수 기록을 맡는다. 공식 문서가 보장하지 않는 MCP 이름을 custom agent tools에 추정해서 넣지 않는다.
+업데이트 후 해당 호스트에서 MCP 서버를 재연결한다. 새 채팅이나 도구 목록 갱신만으로 실행 중 Python 코드가 교체됐다고 판단하지 않는다. 첫 `hwp_prepare` 응답의 `runtime_version=2.7.9`를 확인한다. 별도 상태 조회는 필요 없다. 서버 등록·별도 stdio 검사 성공은 현재 채팅의 연결 갱신을 보장하지 않는다. 제작자는 자기 페이지의 제출·렌더·도형 검수를 직접 MCP로 처리하고 메인은 준비·배정·빌드·최종 검수 기록을 맡는다. 공식 문서가 보장하지 않는 MCP 이름을 custom agent tools에 추정해서 넣지 않는다.
 
 MCP는 일반 명령 실행이나 Python 파일 읽기를 노출하지 않는다. 호스트의 별도 view_file까지 파일 종류별로 차단하는 보안 경계는 아니므로 담당자 지침도 함께 설치한다. 원본·검수 보고의 실제성은 호스트 실행 기록으로 확인해야 하며, 로컬 영수증만으로 모델의 시각 확인을 증명하지 않는다.
 
