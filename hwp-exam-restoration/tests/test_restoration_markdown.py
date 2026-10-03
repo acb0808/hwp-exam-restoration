@@ -81,7 +81,7 @@ $$\frac{1}{2}$$
         for body in ['$x', '$$', '<script>x</script>', '![x](a.png)', '[link](https://a)',
                      '::: unknown\nx\n:::', '::: box 보기\nx', '::: choices 2\n① x | | ③ z\n:::',
                      '::: choices 1\n① x | ② y\n:::', '```python\nx\n```', '# ignored heading',
-                     '::: box\n![](figure:f1)\n:::', '*emphasis*', '_emphasis_', '| table | row |',
+                     '*emphasis*', '_emphasis_', '| table | row |',  # a figure inside ::: box is valid since v2.7.5
                      '- list', '<!-- unknown -->']:
             with self.subTest(body=body), self.assertRaisesRegex(ValueError, 'line'):
                 parse('## left\n### q1\n' + body)

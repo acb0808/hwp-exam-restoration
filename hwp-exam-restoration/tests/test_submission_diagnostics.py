@@ -98,6 +98,11 @@ class SubmissionDiagnosticsTests(unittest.TestCase):
                                  'label': '1', 'answer': '$2$', 'reason': '대입하여 확인했다.'}])
         self.assertEqual(validate('## left\n### q1\n본문')[1], [])
 
+    def test_picture_choices_answer_is_a_choice_row(self):
+        """광남중 q2: ①~⑤ scatter plots drawn as one figure went to the 서답형 row in two runs."""
+        rows = validate('## left\n### q2\n양의 상관관계를 나타내는 산점도는?\n' + answer(value='⑤'), True)[1]
+        self.assertEqual(rows[0]['kind'], 'choice')
+
     def test_answer_equations_retain_source_line_and_body_for_more_diagnostics(self):
         text = '## left\n### q1\n본문\n' + answer(value='$2', reason='$$')
         errors = self.errors(text, True)

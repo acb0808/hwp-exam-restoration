@@ -21,7 +21,7 @@ class AuthorHelpTests(unittest.TestCase):
             pdf.new_page()
             pdf.save(source)
         self.call('prepare', source=str(source), question_pages=[1], include_answers=False)
-        self.call('assign', page=1, worker_id='test-producer', evidence='Test fixture assignment, not a visual review.')
+        self.call('assign', page=1, worker_id='test-producer', evidence='test-producer: test fixture assignment, not a visual review.')
 
     def call(self, action, **params):
         return dispatch(action, {'job': str(self.root), **params})
@@ -103,7 +103,7 @@ class AuthorHelpTests(unittest.TestCase):
     def test_enabled_answer_mode_and_example_are_usable(self):
         self.root = self.root.parent / 'answer-job'
         self.call('prepare', source=str(self.root.parent / 'source.pdf'), question_pages=[1], include_answers=True)
-        self.call('assign', page=1, worker_id='test-answer-worker', evidence='Test fixture assignment.')
+        self.call('assign', page=1, worker_id='test-answer-worker', evidence='test-answer-worker: test fixture assignment.')
         task = (self.root / 'workers/page-0001/task.md').read_text(encoding='utf-8')
         self.assertIn('include_answers=true', task)
         self.assertIn('마지막 정답표용 답 블록', task)

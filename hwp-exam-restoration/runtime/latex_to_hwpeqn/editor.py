@@ -71,7 +71,7 @@ def _requirements(tree: dict, diagnostics: list[dict]) -> list[dict]:
     return requirements
 
 
-def convert_for_editor(latex: str, *, matrix_padding: int = 1) -> dict:
+def convert_for_editor(latex: str, *, matrix_padding: int = 2) -> dict:
     """Return JSON-compatible source, editable tree, requirements and HWP fallback.
 
     ok means the supported syntax was parsed. The receiving editor must
@@ -103,7 +103,7 @@ def convert_for_editor(latex: str, *, matrix_padding: int = 1) -> dict:
     return payload
 
 
-def convert_document_for_editor(source: str, *, matrix_padding: int = 1) -> dict:
+def convert_document_for_editor(source: str, *, matrix_padding: int = 2) -> dict:
     """Preserve independently delimited equations and unchanged plain text."""
     from .document import convert_document
     document = convert_document(source, matrix_padding=matrix_padding,

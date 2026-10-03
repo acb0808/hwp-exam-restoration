@@ -13,7 +13,7 @@ MAX_DOCUMENT = 1_000_000
 MAX_EQUATIONS = 1000
 
 
-def convert_document(source: str, *, matrix_padding: int = 1, strict: bool = False, allow_layout_approximation: bool = False) -> DocumentResult:
+def convert_document(source: str, *, matrix_padding: int = 2, strict: bool = False, allow_layout_approximation: bool = False) -> DocumentResult:
     from . import convert
     if not isinstance(source, str):
         return DocumentResult('', False, diagnostics=(Diagnostic('invalid_input', 'Input must be a string.', 0, 0),))

@@ -23,7 +23,7 @@ def validate_items(action, params):
         required = ('worker_id', 'evidence') if action == 'assign' else ()
         if action == 'submit_reading':
             selected = [key for key in ('markdown', 'markdown_path') if item.get(key) is not None]
-            if len(selected) != 1:
+            if len(selected) > 1:  # none: the page's assigned reading.md is used
                 raise ValueError('provide_exactly_one_markdown_or_markdown_path_per_item')
             required = tuple(selected)
         if any(not isinstance(item.get(key), str) or not item[key].strip() for key in required):

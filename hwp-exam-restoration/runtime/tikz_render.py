@@ -53,8 +53,23 @@ def render(source,output,engine=None,dpi=300):
     command=[str(executable),'-no-shell-escape','-interaction=nonstopmode','-halt-on-error','diagram.tex']
     code,stdout=compile_tex(command,root);log=root/'compile.log';log.write_bytes(stdout)
     pdf=root/'diagram.pdf'
-    if code!=0 or not pdf.is_file():raise ValueError('tikz_compile_failed: '+str(log))
-    if b'Missing character:' in stdout:raise ValueError('tikz_missing_character: '+str(log))
+    if code!=0 or not pdf.is_file():
+        # Quote the first TeX error so the producer need not open the log for the usual cases.
+        text=stdout.decode('utf-8','replace');first=next((l.strip() for l in text.splitlines() if l.startswith('!')),'')
+        where=next((l.strip() for l in text.splitlines() if re.match(r'l\.\d+',l)),'')
+        hint=(' The named paths do not cross where they are drawn: extend the construction line past the curve, '
+              'e.g. \\path[name path=fold] ($(A)!-0.5!(B)$) -- ($(A)!1.5!(B)$);' if re.search(r"No shape named .?intersection-\d",first) else '')
+        raise ValueError('tikz_compile_failed: '+(first+' '+where).strip()+hint+' log: '+str(log))
+    if b'Missing character:' in stdout:
+        # Name the glyph and the fix: a retry cannot succeed with the same symbol.
+        found=re.findall(r'Missing character: There is no (\S+) in font ([^!\n]*)',stdout.decode('utf-8','replace'))
+        stray=sorted({g for g,font in found if font.strip()=='nullfont'});glyphs=sorted({g for g,font in found if font.strip()!='nullfont'})
+        parts=[]
+        # nullfont means text typed on a path, outside any node: usually a doubled ';' or a bare label.
+        if stray:parts.append('stray text '+' '.join(stray)+' outside a node (remove extra ; or put the text in \\node{...})')
+        if glyphs:parts.append(' '.join(glyphs)+' not in the TeX fonts; draw it instead (hollow arrow: \\ExamImplies{x,y}; '
+                               'others: TikZ lines or math such as $\\Rightarrow$)')
+        raise ValueError('tikz_missing_character: '+'; '.join(parts)+'. log: '+str(log))
     import fitz
     with fitz.open(pdf) as doc:
         if len(doc)!=1:raise ValueError('tikz_single_page_required')

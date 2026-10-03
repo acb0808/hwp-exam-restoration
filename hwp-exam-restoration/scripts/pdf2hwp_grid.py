@@ -64,6 +64,9 @@ def build_grid_page(page,index,flow,root,profile,fields):
             if page.get('role')=='answer_sheet':
                 from restoration_answers import table_xml
                 content=table_xml(flow,question,page['answer_rows'],usable)
+            elif page.get('role')=='review_notes':
+                from restoration_answers import notes_table_xml
+                content=notes_table_xml(flow,question,page['note_rows'],usable)
             else:content=flow.contents(question['content'],question,usable)
             wrapped=E.fromstring('<root xmlns:hp="'+HP[1:-1]+'" xmlns:hc="'+HC[1:-1]+'">'+content+'</root>')
             sub.extend(list(wrapped));rows[row_offset+start].append(cell)

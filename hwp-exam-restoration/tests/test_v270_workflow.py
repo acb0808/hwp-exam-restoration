@@ -30,7 +30,7 @@ class Workflow270Tests(unittest.TestCase):
         return single.dispatch(action, {'job': str(self.root), **params})
 
     def assignments(self):
-        return [{'page': n, 'worker_id': f'producer-{n}', 'evidence': f'actual fixture worker {n}'} for n in (1, 2)]
+        return [{'page': n, 'worker_id': f'producer-{n}', 'evidence': f'actual fixture worker producer-{n}'} for n in (1, 2)]
 
     def test_syntax_error_survives_status_and_correction_clears_it(self):
         self.call('assign', **self.assignments()[0])
@@ -94,12 +94,13 @@ class Workflow270Tests(unittest.TestCase):
 
     def test_batch_preflight_rejects_duplicate_mixed_and_unknown_fields_without_mutation(self):
         first = self.assignments()[0]
+        before = job._manifest(self.root)['assignments']  # prepared page slots only
         for params in ({'items': [first, first]}, {'items': [first], 'page': 1},
                        {'items': [dict(first, shell='forbidden')]}, {'items': []}):
             with self.subTest(params=params):
                 result = self.call('assign', **params)
                 self.assertEqual(result['status'], 'failed', result)
-                self.assertEqual(job._manifest(self.root)['assignments'], [])
+                self.assertEqual(job._manifest(self.root)['assignments'], before)
 
     def test_environment_failure_does_not_request_math_rewrite(self):
         with patch.object(single, 'perform', side_effect=PermissionError('denied')):

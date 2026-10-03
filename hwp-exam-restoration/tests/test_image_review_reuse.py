@@ -121,7 +121,8 @@ class ImageReviewReuseTests(unittest.TestCase):
         self.assertEqual(result['status'],'complete',result)
         self.assertEqual(result['review_tasks'],[])
         self.assertEqual(result['reused_review_pages'],[1])
-        self.assertIn('reused_from_output_sha256',result['reviews']['1'])
+        self.assertEqual(result['reviews']['passed'],[1])  # evidence hashes stay in state, not in the reply
+        self.assertIn('reused_from_output_sha256',job.load_json(self.case.root/'mcp/state.json')['reviews']['1'])
 
     def test_changed_final_pixels_require_new_review(self):
         from PIL import Image

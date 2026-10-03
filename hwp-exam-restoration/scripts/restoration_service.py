@@ -353,7 +353,7 @@ def _perform(action,p,root,meta):
         # Fixed arguments, no shell, fresh local staging; never attach to or kill user's Hangul.
         native_dir=Path(tempfile.gettempdir())/('hwp-restoration-'+uuid.uuid4().hex)
         command=[sys.executable,'-B','-X','utf8',str(SKILL/'scripts/restore.py'),'native',str(root),str(receipt),str(native_dir)]
-        run=subprocess.run(command,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=300)
+        run=subprocess.run(command,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=900)  # may wait for another job's export
         log=_fresh(root,'.log'); log.write_text(run.stdout+'\n'+run.stderr,encoding='utf-8')
         native_receipt=native_dir/'restoration-native.json'
         if not native_receipt.exists(): raise ValueError('native_render_failed: '+run.stdout[-500:])

@@ -1,5 +1,12 @@
 % Engine-owned annotation primitives. Inlined into each helper-using document.
-\usetikzlibrary{decorations.markings}
+\usetikzlibrary{decorations.markings,shapes.arrows}
+
+% Hollow block arrow printed between figure panels (the exam glyph U+21E8 is missing from the TeX fonts).
+% #2 is a coordinate such as 4.7,1 or a named point.
+\newcommand{\ExamImplies}[2][]{%
+  \node[single arrow,draw,line width=.5pt,minimum height=7mm,inner sep=.8mm,
+        single arrow head extend=.9mm,single arrow tip angle=90,#1] at (#2) {};%
+}
 
 % B is the corner; the caller must confirm a right-angle mark in the source.
 \newcommand{\ExamRightAngle}[4][]{%

@@ -13,7 +13,7 @@ __version__ = '0.3.0'
 __all__ = ['convert', 'latex_to_hwpeqn', 'EquationConverter', 'ConversionResult', 'Diagnostic', 'LatexConversionError', 'convert_document', 'DocumentResult', 'DocumentSegment', 'convert_for_editor', 'convert_document_for_editor']
 
 
-def convert(latex: str, *, matrix_padding: int = 1, strict: bool = False, allow_layout_approximation: bool = False) -> ConversionResult:
+def convert(latex: str, *, matrix_padding: int = 2, strict: bool = False, allow_layout_approximation: bool = False) -> ConversionResult:
     """Convert one expression. Errors yield no script. Offsets index original Unicode text.
 
     matrix_padding is an explicit count (0..8) of HWP spaces on each side of a
@@ -53,7 +53,7 @@ def convert(latex: str, *, matrix_padding: int = 1, strict: bool = False, allow_
         return ConversionResult(latex, False, error=d.message, diagnostics=(d,))
 
 
-def latex_to_hwpeqn(latex: str, *, matrix_padding: int = 1, strict: bool = True, allow_layout_approximation: bool = False) -> str:
+def latex_to_hwpeqn(latex: str, *, matrix_padding: int = 2, strict: bool = True, allow_layout_approximation: bool = False) -> str:
     """Return script or raise; strict defaults to True so warnings cannot disappear."""
     result = convert(latex, matrix_padding=matrix_padding, strict=strict,
                      allow_layout_approximation=allow_layout_approximation)
@@ -64,7 +64,7 @@ def latex_to_hwpeqn(latex: str, *, matrix_padding: int = 1, strict: bool = True,
 
 class EquationConverter:
     """Compatibility-shaped converter with no subprocesses or shared mutable cache."""
-    def __init__(self, *, matrix_padding: int = 1, strict: bool = False, allow_layout_approximation: bool = False):
+    def __init__(self, *, matrix_padding: int = 2, strict: bool = False, allow_layout_approximation: bool = False):
         self.matrix_padding = matrix_padding
         self.strict = strict
         self.allow_layout_approximation = allow_layout_approximation

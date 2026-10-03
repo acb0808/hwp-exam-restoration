@@ -34,6 +34,13 @@ def _digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def _studio_equation(latex,eqid):
     from runtime_paths import equation_compiler
     compile_equation=equation_compiler()
+    import re
+    # The converter spaces commas itself (exam typesetting), so a typed space right after a comma
+    # is redundant rather than a lossy approximation: (3,\ 1) and (3, 1) print the same.
+    latex=re.sub(r',\s*\\[ ,;:]\s*',', ',latex)  # \quad stays an error: it asks for a wide gap
+    # HWP equations have one fraction size, so \dfrac and \tfrac print exactly like \frac.
+    latex=re.sub(r'\\[dt]frac(?![A-Za-z])',r'\\frac',latex)
+    if re.search(r'\\(?:i+nt|oint)(?![A-Za-z])',latex):latex=re.sub(r'\\[ ,;:]\s*(?=d[A-Za-z])','',latex)  # same for the dx of an integral
     result=compile_equation({'type':'equation','latex':latex},eqid)
     # Studio calls its parsed AST -> native-script output "fallback". This is
     # distinct from copying failed LaTeX into script; require the parsed receipt.
@@ -67,7 +74,9 @@ def build_hwpx(pages:list[dict],output:Path,automation_dir:Path|None=None,templa
     width,height=[_num(x,1) for x in first_size]
     if any(abs(p['size_mm'][0]-first_size[0])>0.5 or abs(p['size_mm'][1]-first_size[1])>0.5 for p in pages):raise ValueError('mixed_page_sizes_not_supported')
     source_numbers=[p['page_number'] for p in pages]
-    if any(type(n) is not int or n<1 for n in source_numbers) or source_numbers!=sorted(set(source_numbers)):
+    ordered=[p['page_number'] for p in pages if p.get('role')!='review_notes']  # the notes page sits before the answer sheet
+    if (any(type(n) is not int or n<1 for n in source_numbers) or len(set(source_numbers))!=len(source_numbers)
+            or ordered!=sorted(ordered)):
         raise ValueError('source_pages_must_be_positive_unique_and_ordered')
     output=Path(output).resolve()
     receipt={'status':'built_pending_native_validation','path':str(output),'pages':[],'equations':[],

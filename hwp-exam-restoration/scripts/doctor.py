@@ -1,7 +1,7 @@
 """Read-only check of bundled resources and external application prerequisites."""
 from pathlib import Path
 import hashlib,importlib.util,json,os,runpy,sys
-from runtime_paths import SKILL_ROOT,RUNTIME,automation_root,native_root,equation_compiler
+from runtime_paths import SKILL_ROOT,RUNTIME,automation_root,native_root,equation_compiler,content_digest
 
 def available(name):
     try:return importlib.util.find_spec(name) is not None
@@ -14,10 +14,10 @@ def inspect():
         load_template(SKILL_ROOT/'assets/templates/pdf2hwp-grid')
         automation_root();native_root();equation_compiler()
         manifest=json.loads((RUNTIME/'sources.json').read_text(encoding='utf-8'))
-        for item in manifest['files']:
+        for item in manifest['files']:  # report every mismatch, not only the first
             path=(RUNTIME/item['path']).resolve()
-            if not path.is_relative_to(RUNTIME) or hashlib.sha256(path.read_bytes()).hexdigest()!=item['sha256']:
-                raise ValueError('bundled_runtime_hash_mismatch: '+item['path'])
+            if not path.is_relative_to(RUNTIME) or content_digest(path)!=item['sha256']:
+                errors.append('bundled_runtime_hash_mismatch: '+item['path'])
     except (OSError,ValueError,ImportError,KeyError) as exc:errors.append(str(exc))
     deps={name:available(name) for name in ('jsonschema','fitz','PIL','psutil','win32com','pythoncom')}
     ready=not errors and all(deps[n] for n in ('jsonschema','fitz','PIL'))

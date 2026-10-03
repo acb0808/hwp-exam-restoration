@@ -31,12 +31,12 @@ class QuestionOnlyTests(unittest.TestCase):
         self.assertEqual(result['status'], 'prepared', result)
         self.assertEqual([p['page'] for p in result['spawn_requests']], [3, 4])
         self.assertEqual(image.stat().st_mtime_ns, stamp)
-        self.assertEqual(self.call('assign', page=1, worker_id='cover', evidence='test')['status'], 'failed')
+        self.assertEqual(self.call('assign', page=1, worker_id='cover', evidence='test cover')['status'], 'failed')
 
     def test_markdown_alone_accepts_selected_pages_and_builds_two_pages(self):
         self.call('prepare', source=str(self.source), question_pages=[3, 4])
         for n in (3, 4):
-            self.call('assign', page=n, worker_id=f'owner-{n}', evidence='test')
+            self.call('assign', page=n, worker_id=f'owner-{n}', evidence=f'test owner-{n}')
             result = self.call('submit_reading', page=n, markdown=MD)
             self.assertEqual(result['status'], 'accepted', result)
         self.assertEqual([p['page_number'] for p in job.assemble(self.root)], [3, 4])
@@ -49,14 +49,14 @@ class QuestionOnlyTests(unittest.TestCase):
 
     def test_cover_cannot_be_submitted_as_a_question(self):
         self.call('prepare', source=str(self.source), question_pages=[3])
-        self.call('assign', page=3, worker_id='owner', evidence='test')
+        self.call('assign', page=3, worker_id='owner', evidence='test owner')
         result = self.call('submit_reading', page=3, markdown='## left\n### cover\n시험 안내\n')
         self.assertEqual(result['status'], 'failed', result)
 
     def test_skipping_internal_blank_preserves_source_ids_when_building(self):
         self.call('prepare',source=str(self.source),question_pages=[1,3])
         for n in (1,3):
-            self.call('assign',page=n,worker_id=f'owner-{n}',evidence='test')
+            self.call('assign',page=n,worker_id=f'owner-{n}',evidence=f'test owner-{n}')
             self.assertEqual(self.call('submit_reading',page=n,markdown=MD)['status'],'accepted')
         result=self.call('build',output=str(self.root/'selected.hwpx'),title='test',school='test',year='2026',exam_title='test',native=False)
         self.assertEqual(result['status'],'built',result)
@@ -67,6 +67,7 @@ class QuestionOnlyTests(unittest.TestCase):
         sys.path.insert(0,str(automation_root()/'scripts'))
         import native_layout
         self.call('prepare',source=str(self.source),question_pages=[3])
+        self.call('assign',page=3,worker_id='owner',evidence='test owner')  # v2.7.5: build needs bound slots
         source=self.root/'fixture.hwpx';source.write_bytes(b'synthetic preflight only')
         with patch.object(native_layout.importlib.util,'find_spec',return_value=None),patch.object(native_layout.subprocess,'Popen') as process:
             native=native_layout.render_native(source,self.root/'preflight')
@@ -83,14 +84,14 @@ class QuestionOnlyTests(unittest.TestCase):
 
     def test_page_selection_is_frozen_after_assignment(self):
         self.call('prepare', source=str(self.source), question_pages=[3])
-        self.call('assign', page=3, worker_id='owner', evidence='test')
+        self.call('assign', page=3, worker_id='owner', evidence='test owner')
         self.assertEqual(self.call('prepare', source=str(self.source), question_pages=[4])['status'], 'failed')
 
     def test_native_review_matches_source_three_to_output_one(self):
         import fitz
         self.call('prepare', source=str(self.source), question_pages=[3,4])
         for n in (3,4):
-            self.call('assign',page=n,worker_id=f'owner-{n}',evidence='test')
+            self.call('assign',page=n,worker_id=f'owner-{n}',evidence=f'test owner-{n}')
             self.call('submit_reading',page=n,markdown=MD)
         pdf=self.root/'fixture-output.pdf'
         with fitz.open() as doc:
@@ -112,26 +113,48 @@ class QuestionOnlyTests(unittest.TestCase):
                            reviews=[{'page':n,'status':'passed','issues':[]} for n in (3,4)])
         self.assertEqual(reviewed['status'],'complete',reviewed)
 
-    def test_build_waits_for_owned_supervisor_before_returning(self):
+    def test_build_starts_the_owned_supervisor_and_reports_its_receipt(self):
+        # v2.7.9: the build no longer holds the job until the export ends (test_client_timeouts).
         self.call('prepare',source=str(self.source),question_pages=[3])
-        proc=MagicMock();proc.pid=987654;proc.wait.return_value=0
+        self.call('assign',page=3,worker_id='owner',evidence='test owner')  # v2.7.5: build needs bound slots
+        proc=MagicMock();proc.pid=987654
         with patch.object(single.shared,'_perform',return_value={'status':'built'}), \
-             patch.object(single.subprocess,'Popen',return_value=proc), \
+             patch.object(single.subprocess,'Popen',return_value=proc) as popen, \
              patch.object(single,'collect_native',return_value={'status':'pending_review'}):
             self.assertEqual(self.call('build',output=str(self.root/'out.hwpx'))['status'],'pending_review')
-            proc.wait.assert_called_once_with()
+            popen.assert_called_once()
+        self.assertEqual(job.load_json(self.root/'mcp/state.json')['native_run']['pid'],987654)
         single._NATIVE_PROCESSES.pop(proc.pid,None)
 
     def test_unknown_cleanup_blocks_relaunch_even_after_supervisor_exit(self):
         self.call('prepare',source=str(self.source),question_pages=[3])
+        self.call('assign',page=3,worker_id='owner',evidence='test owner')  # v2.7.5: build needs bound slots
         state=job.load_json(self.root/'mcp/state.json')
         receipt=self.root/'failed-native.json'
         job.save_json(receipt,{'status':'failed','cleanup':'no_ownership_receipt_no_cleanup'})
         state['native_run']={'receipt':str(receipt),'returncode':2};job.save_json(self.root/'mcp/state.json',state)
-        with patch.object(single.shared,'_perform') as build:
+        # The session the failed export had started cannot be shown to be gone: still no relaunch.
+        with patch.object(single.shared,'_perform') as build,              patch('restoration_native_queue.owned_session_gone',return_value=False):
             result=self.call('build',output=str(self.root/'new.hwpx'))
             self.assertEqual(result.get('message'),'native_cleanup_unconfirmed',result)
             build.assert_not_called()
+
+    def test_export_that_left_no_session_can_be_built_again(self):
+        # Killed with the CLI, or refused because another job held Hangul: no receipt of a clean close, but no
+        # Hangul of its own either (no ownership record). This used to block the job for good.
+        self.call('prepare',source=str(self.source),question_pages=[3])
+        self.call('assign',page=3,worker_id='owner',evidence='test owner')
+        state=job.load_json(self.root/'mcp/state.json')
+        for name,previous in (('busy',{'status':'failed','cleanup':'no_ownership_receipt_no_cleanup'}),('killed',None)):
+            run=self.root/name;run.mkdir();receipt=run/'restoration-native.json'
+            if previous:job.save_json(receipt,previous)
+            state['native_run']={'receipt':str(receipt),'returncode':2};job.save_json(self.root/'mcp/state.json',state)
+            proc=MagicMock();proc.pid=987650;proc.wait.return_value=0
+            with patch.object(single.shared,'_perform',return_value={'status':'built'}) as build,                  patch.object(single.subprocess,'Popen',return_value=proc),                  patch.object(single,'collect_native',return_value={'status':'pending_review'}):
+                self.assertEqual(self.call('build',output=str(self.root/f'{name}.hwpx'))['status'],'pending_review',name)
+                build.assert_called_once()
+            single._NATIVE_PROCESSES.pop(proc.pid,None)
+            state=job.load_json(self.root/'mcp/state.json')
 
 
 class AutomaticFigureSizeTests(unittest.TestCase):

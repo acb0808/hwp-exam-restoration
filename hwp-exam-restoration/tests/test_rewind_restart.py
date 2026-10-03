@@ -28,8 +28,19 @@ class RewindRestartTests(unittest.TestCase):
         next_run=workflow.dispatch('prepare',{'job':str(fresh),'source':str(source),'question_pages':[1]})
         self.assertEqual(next_run['status'],'prepared')
         self.assertEqual(len(next_run['spawn_requests']),1)
-        self.assertEqual(job._manifest(fresh)['assignments'],[])
+        self.assertTrue(all(a.get('pending') for a in job._manifest(fresh)['assignments']))  # slots only, no actual worker
         self.assertEqual((root/'manifest.json').read_bytes(),before)
+
+    def test_run_stopped_after_its_last_page_is_rebuilt_not_redone(self):
+        root=self.case.root;source=Path(self.case.temp.name)/'source.pdf'
+        first=self.case.call('prepare',source=str(source),question_pages=[1])
+        self.assertEqual(first['page_status'],{1:'in_progress'});self.assertIn('restart_job',first)
+        self.case.compose()  # the producer finished its page; then the run was stopped before or during the build
+        again=self.case.call('prepare',source=str(source),question_pages=[1])
+        self.assertEqual((again['status'],again['page_status'],again.get('continue_with')),('already_assigned',{1:'accepted'},'hwp_build'))
+        self.assertNotIn('restart_job',again);self.assertEqual(again['spawn_requests'],[])
+        built=self.case.call('build',output=str(root/'restarted.hwpx'),title='t',school='s',year='2026',exam_title='e',native=False)
+        self.assertEqual(built['status'],'built',built)
 
     def test_unassigned_prepare_stays_idempotent_for_page_selection(self):
         import fitz

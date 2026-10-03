@@ -6,6 +6,9 @@ import math
 import os
 import re
 import runpy
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from restoration_job import _manifest, assemble, digest, load_json, save_json, figure_info
 
 
@@ -72,7 +75,38 @@ def _receipt_matches_conditions(receipt, conditions):
             and recorded.get('command') == [conditions['engine'], *conditions['flags'], 'diagram.tex'])
 
 
-def prepare_figures(job, page, rows, output, *, engine=None, dpi=300, reuse_batch=None):
+RENDER_WORKERS = 4  # figures of one page compiled side by side
+# Pages render side by side in one MCP server (restoration_single._render); compiles stay at this many per server.
+_COMPILES = threading.BoundedSemaphore(RENDER_WORKERS)
+# MiKTeX now and then dies at start-up ("internal error", no TeX error) when many compiles start together,
+# as with several jobs on one PC: 2 of 100 compiles with five jobs at once. The same compile then succeeds.
+ENGINE_RETRIES = 2
+
+
+def _compile_outside(render, gate):
+    """Make render's TeX compile run with the gate released. Returns the undo call.
+    Only the compiler subprocess runs side by side: PyMuPDF and the refit callback's job state stay single-threaded."""
+    scope = getattr(render, '__globals__', None)
+    inner = scope.get('compile_tex') if isinstance(scope, dict) else None
+    if inner is None: return lambda: None
+    def compile_tex(command, root):
+        gate.release()
+        try:
+            with _COMPILES:
+                for attempt in range(ENGINE_RETRIES + 1):
+                    code, out = inner(command, root)
+                    # A TeX error ("! ...") is the producer's to fix; the engine dying without one is not.
+                    if code == 0 or attempt == ENGINE_RETRIES or any(line.startswith(b'!') for line in (out or b'').splitlines()):
+                        return code, out
+                    time.sleep(1 + 2 * attempt)
+        finally: gate.acquire()
+    scope['compile_tex'] = compile_tex
+    return lambda: scope.__setitem__('compile_tex', inner)
+
+
+def prepare_figures(job, page, rows, output, *, engine=None, dpi=300, reuse_batch=None, refit=None):
+    """refit(row, pdf) may return replacement TeX for a fresh render (crowded or crossed labels); None keeps it.
+    It is asked again after a refit, twice at most: the label shifts of a crowded figure need its floored render."""
     root, identity = binding(job, page)
     from restoration_ab import check_figure_requests
     check_figure_requests(root,page,rows)
@@ -102,48 +136,74 @@ def prepare_figures(job, page, rows, output, *, engine=None, dpi=300, reuse_batc
             if not isinstance(item,dict) or not isinstance(item.get('id'),str) or item['id'] in previous:
                 raise ValueError('invalid_reuse_batch_items')
             previous[item['id']] = item
-    out = new_folder(output); items = []; errors = []
-    runtime = None
+    out = new_folder(output)
     renderer_path = Path(__file__).resolve().parents[1]/'runtime/tikz_render.py'
-    for row in rows:
-        item = {'id':row['id'], 'question_id':row['question_id'], 'width_mm':row['width_mm'],
-                'reused':False, 'reuse_reason':'not_requested' if reuse_batch is None else 'no_matching_render'}
-        try:
-            if 'source' in row:
-                if runtime is None: runtime = runpy.run_path(str(renderer_path))
-                conditions = _render_conditions(runtime, renderer_path, row['source'], engine, dpi)
-                prior = previous.get(row['id'], {})
-                receipt = None
-                if (conditions is not None and prior.get('question_id')==row['question_id']
-                        and prior.get('render_conditions')==conditions
-                        and prior.get('status')=='pending_review'):
-                    receipt = Path(prior['render_receipt']).resolve(strict=True)
-                    if digest(receipt)!=prior.get('render_sha256'):
-                        raise ValueError('render_receipt_hash_mismatch')
-                    if not _receipt_matches_conditions(receipt, conditions):
-                        raise ValueError('reuse_render_conditions_mismatch')
-                    # figure_info below verifies every recorded artifact hash.
-                    item.update(reused=True, reuse_reason='verified_unchanged_render')
-                if receipt is None:
-                    render_dir = out/row['id']
-                    runtime['render'](row['source'], render_dir,
-                                      engine=conditions['engine'] if conditions else engine, dpi=dpi)
-                    receipt = render_dir/'render.json'
-                    if reuse_batch is not None:
-                        item['reuse_reason']='render_conditions_changed_or_unavailable'
-                if _receipt_matches_conditions(receipt, conditions):
-                    item['render_conditions']=conditions
-            else:
-                receipt = Path(row['render_receipt']).resolve(strict=True)
-                item['reuse_reason']='explicit_render_receipt'
-            info = figure_info(root, page, row['question_id'], receipt, width_mm=row['width_mm'])
-            review = out/(row['id']+'.review.json')
-            save_json(review,info['review_template'])
-            item.update(render_receipt=str(receipt), render_sha256=digest(receipt),
-                        png=info['figure']['path'], review=str(review), status='pending_review')
-        except (ValueError, KeyError, TypeError, OSError, ImportError) as exc:
-            item.update(status='failed', reused=False, error=str(exc)); errors.append({'id':row['id'],'error':str(exc)})
-        items.append(item)
+    gate = threading.Lock(); loaded = {}
+
+    def renderer():
+        if not loaded:
+            loaded['runtime'] = runpy.run_path(str(renderer_path))
+            loaded['undo'] = _compile_outside(loaded['runtime'].get('render'), gate)
+        return loaded['runtime']
+
+    def prepare(row):
+        with gate:
+            item = {'id':row['id'], 'question_id':row['question_id'], 'width_mm':row['width_mm'],
+                    'reused':False, 'reuse_reason':'not_requested' if reuse_batch is None else 'no_matching_render'}
+            try:
+                if 'source' in row:
+                    runtime = renderer()
+                    conditions = _render_conditions(runtime, renderer_path, row['source'], engine, dpi)
+                    prior = previous.get(row['id'], {})
+                    receipt = None
+                    if (conditions is not None and prior.get('question_id')==row['question_id']
+                            and prior.get('render_conditions')==conditions
+                            and prior.get('status')=='pending_review'):
+                        receipt = Path(prior['render_receipt']).resolve(strict=True)
+                        if digest(receipt)!=prior.get('render_sha256'):
+                            raise ValueError('render_receipt_hash_mismatch')
+                        if not _receipt_matches_conditions(receipt, conditions):
+                            raise ValueError('reuse_render_conditions_mismatch')
+                        # figure_info below verifies every recorded artifact hash.
+                        item.update(reused=True, reuse_reason='verified_unchanged_render')
+                    if receipt is None:
+                        render_dir = out/row['id']
+                        runtime['render'](row['source'], render_dir,
+                                          engine=conditions['engine'] if conditions else engine, dpi=dpi)
+                        receipt = render_dir/'render.json'
+                        for suffix in ('-refit', '-refit2'):
+                            replacement = refit(row, render_dir/'diagram.pdf') if refit else None
+                            if replacement is None: break
+                            Path(row['source']).write_text(replacement, encoding='utf-8')
+                            conditions = _render_conditions(runtime, renderer_path, row['source'], engine, dpi)
+                            render_dir = out/(row['id']+suffix)
+                            runtime['render'](row['source'], render_dir,
+                                              engine=conditions['engine'] if conditions else engine, dpi=dpi)
+                            receipt = render_dir/'render.json'
+                        if reuse_batch is not None:
+                            item['reuse_reason']='render_conditions_changed_or_unavailable'
+                    if _receipt_matches_conditions(receipt, conditions):
+                        item['render_conditions']=conditions
+                else:
+                    receipt = Path(row['render_receipt']).resolve(strict=True)
+                    item['reuse_reason']='explicit_render_receipt'
+                info = figure_info(root, page, row['question_id'], receipt, width_mm=row['width_mm'])
+                review = out/(row['id']+'.review.json')
+                save_json(review,info['review_template'])
+                item.update(render_receipt=str(receipt), render_sha256=digest(receipt),
+                            png=info['figure']['path'], review=str(review), status='pending_review')
+            except (ValueError, KeyError, TypeError, OSError, ImportError) as exc:
+                item.update(status='failed', reused=False, error=str(exc))
+            return item
+
+    try:
+        workers = min(RENDER_WORKERS, len(rows), os.cpu_count() or 1)
+        if workers > 1:
+            with ThreadPoolExecutor(workers) as pool: items = list(pool.map(prepare, rows))  # rows order is kept
+        else: items = [prepare(row) for row in rows]
+    finally:
+        loaded.get('undo', lambda: None)()
+    errors = [{'id':i['id'], 'error':i['error']} for i in items if i['status']=='failed']
     batch = {'schema':'restoration-figure-batch/1', **identity, 'items':items,
              'status':'failed' if errors else 'pending_review', 'errors':errors}
     save_json(out/'batch.json', batch)
@@ -193,8 +253,11 @@ def review_pack(job, native, output, *, dpi=200):
         if any(p.rect.width*p.rect.height*(dpi/72)**2 > 40_000_000 for p in doc): raise ValueError('review_pixel_budget_exceeded')
         out = new_folder(output); packets = []
         for number, rendered in enumerate(doc,1):
+            if pages[number-1].get('role')=='review_notes': continue  # mechanical notes for the human checker
             png = out/f'page-{number:04d}.png'
             rendered.get_pixmap(dpi=dpi,alpha=False).save(png)
+            from restoration_job import compact_page_image
+            compact_page_image(png)
             crops = []  # Full pages only; enlarge only an observed uncertainty.
             source_number = pages[number-1]['page_number']
             if pages[number-1].get('role')=='answer_sheet':

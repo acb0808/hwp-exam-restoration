@@ -112,6 +112,14 @@ class MCPTransportTests(unittest.TestCase):
         dispatch.assert_called_once_with('finish_review', {'job': 'job', 'reviewer_id': 'fixture-reviewer',
             'reviews': [{'page': 1, 'status': 'passed', 'issues': []}], 'review_evidence': evidence})
 
+    def test_object_shaped_spawn_evidence_arrives_as_text(self):
+        # opencode turned a JSON-looking evidence string into an object before sending it (v2.7.5 run).
+        with patch.object(self.transport, 'dispatch', return_value={'status': 'assigned'}) as dispatch:
+            self.run_async(self.transport.mcp.call_tool('hwp_assign', {'job': 'job', 'page': 2, 'worker_id': 'ses_a',
+                                                                       'evidence': {'task_id': 'ses_a', 'state': 'completed'}}))
+        self.assertIsInstance(dispatch.call_args.args[1]['evidence'], str)
+        self.assertIn('ses_a', dispatch.call_args.args[1]['evidence'])
+
     def test_single_worker_assignment_is_forwarded(self):
         with patch.object(self.transport, 'dispatch', return_value={'status': 'assigned'}) as dispatch:
             self.run_async(self.transport.hwp_assign('job', 2, 'owner-2', 'actual spawn response'))
@@ -144,6 +152,15 @@ class MCPTransportTests(unittest.TestCase):
             with self.subTest(status=status), patch.object(self.transport, 'dispatch', return_value={'status': status, 'next_action': 'hwp_status'}):
                 result = self.run_async(self.transport.hwp_status('job'))
                 self.assertEqual(result.isError, expected)
+
+    def test_reply_is_sent_in_full_when_shortening_it_fails(self):
+        import restoration_reply
+        payload = {'status': 'pending_review', 'batch_path': 'b.json', 'review_tasks': [{'id': 'f1'}]}
+        with patch.object(self.transport, 'dispatch', return_value=payload), \
+                patch.object(restoration_reply, 'compact_reply', side_effect=TypeError('unexpected shape')):
+            result = self.run_async(self.transport.hwp_render_figures('job', 1))
+        self.assertEqual(result.structuredContent, payload)
+        self.assertFalse(result.isError)
 
     def test_nested_models_become_plain_service_data(self):
         crop = self.transport.CropRequest(id='c1', question_id='q1', bbox_px=[0, 1, 2, 3], reason='unclear symbol')
@@ -182,7 +199,7 @@ class MCPTransportTests(unittest.TestCase):
                             with fitz.open() as pdf:
                                 pdf.new_page();pdf.save(source)
                             await session.call_tool('hwp_prepare',{'job':str(job),'source':str(source),'question_pages':[1],'include_answers':False})
-                            await session.call_tool('hwp_assign',{'job':str(job),'page':1,'worker_id':'test-worker','evidence':'Test worker fixture, not real visual review.'})
+                            await session.call_tool('hwp_assign',{'job':str(job),'page':1,'worker_id':'test-worker','evidence':'test-worker fixture, not real visual review.'})
                             before={p.relative_to(job):p.read_bytes() for p in job.rglob('*') if p.is_file()}
                             helped=await session.call_tool('hwp_help',{'job':str(job),'page':1,'topic':'equations'})
                             self.assertFalse(helped.isError,helped)

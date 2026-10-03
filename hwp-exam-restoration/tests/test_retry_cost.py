@@ -78,7 +78,7 @@ class RetryCostTests(unittest.TestCase):
         with Image.open(current) as original, Image.open(result['image_paths'][0]) as crop:
             self.assertEqual(crop.size, (90,60))
             self.assertEqual(crop.tobytes(), original.crop((0,0,90,60)).tobytes())
-        self.assertEqual(self.call('status')['reviews'], {})
+        self.assertEqual(self.call('status')['reviews'], {'passed': [], 'failed': []})
 
     def test_output_inspection_rejects_stale_tampered_or_invalid_requests(self):
         self.case.fixture_native()

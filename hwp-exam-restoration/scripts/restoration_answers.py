@@ -86,7 +86,9 @@ def validate_answers(value,answers):
         a=answers[q['id']];label=a['label']
         if label in labels:raise ValueError('distinct_answer_labels_required: '+label)
         labels.add(label)
-        kind='choice' if any(b['kind']=='choices' for b in q['content']) else 'written'
+        # Picture choices (①~⑤ drawn inside one figure) have no choices block but a numbered answer.
+        kind=('choice' if any(b['kind']=='choices' for b in q['content'])
+              or re.match(r'^[①②③④⑤](?:\s|$)',a['answer'].strip()) else 'written')
         if kind=='choice' and not re.match(r'^[①②③④⑤](?:\s|$)',a['answer']):
             raise ValueError('choice_answer_requires_printed_choice_number: '+q['id'])
         for field in ('answer','reason'):
@@ -208,3 +210,31 @@ def table_xml(flow,q,rows,width):
                               'container_id':ident,'available_width_mm':width})
     cid=flow.char(q['font_family'],10)
     return title+flow.paragraph(f'<hp:run charPrIDRef="{cid}">{table}</hp:run>',flow.style({'before_mm':5}),cid)
+
+NOTE_COLUMNS=(('쪽',0.11,'CENTER'),('문항',0.13,'CENTER'),('구분',0.13,'CENTER'),('검수 내용',0.63,'LEFT'))
+NOTE_CHARS_PER_LINE=40  # 10pt Hangul in the 63% content column of a one-column body (measured in Hangul output)
+
+def note_row_height(text):
+    return max(9,4+5*((len(text)+NOTE_CHARS_PER_LINE-1)//NOTE_CHARS_PER_LINE))
+
+def notes_table_xml(flow,q,rows,width):
+    """Editable 검수 노트 table: page, printed question, kind and the reviewer's observation."""
+    fill=flow.border(('left','right','top','bottom'),0.12)
+    def paragraph(text,align='LEFT',pt=10):
+        block={'id':'note-'+flow.uid(),'runs':[{'kind':'text','text':text}],'font_pt':pt,'align':align,'line_spacing_pct':130}
+        inner,cid=flow.runs(block['runs'],q,block)
+        return flow.paragraph(inner,flow.style(block),cid)
+    cells=[];heights=[]
+    for index,values in enumerate([[c[0] for c in NOTE_COLUMNS]]+[[r['page'],r['question'],r['kind'],r['text']] for r in rows]):
+        height=9 if index==0 else note_row_height(values[3])
+        xml=[flow.cell(paragraph(value,'CENTER' if index==0 else align),width*share,height,col,index,fill=fill,padding=(2,1.5,2,1.5))
+             for col,(value,(_,share,align)) in enumerate(zip(values,NOTE_COLUMNS))]
+        cells.append('<hp:tr>'+''.join(xml)+'</hp:tr>');heights.append(height)
+    height=sum(heights)
+    if height>225:raise ValueError('review_notes_exceed_one_page')
+    ident=flow.uid();table=flow.table(''.join(cells),width,height,ident,flow.inline_position(width,height),rowcount=len(cells),colcount=len(NOTE_COLUMNS))
+    flow.measurements.append({'block_id':q['id']+'/notes-table','kind':'logical_box','container_id':ident,'available_width_mm':width})
+    cid=flow.char(q['font_family'],10)
+    return (paragraph('검수 노트','CENTER',16)
+            +paragraph('자동 검수에서 수정하지 않고 기록만 한 항목입니다. 원본과 대조해 직접 확인하세요.','LEFT',9)
+            +flow.paragraph(f'<hp:run charPrIDRef="{cid}">{table}</hp:run>',flow.style({'before_mm':3}),cid))

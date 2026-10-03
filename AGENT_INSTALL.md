@@ -6,18 +6,28 @@
 
 현재 검증 범위는 **Windows + 데스크톱 한컴오피스 한글 + Antigravity CLI + stdio MCP + 실제 서브에이전트**이다. Python은 3.12를 사용한다. 브라우저 채팅만으로 설치할 수 없다.
 
+opencode에서도 복원 실행(task general 서브에이전트)을 검증했지만, 동봉 MCP 등록기는 Antigravity 설정만 다룬다. opencode에서는 그 앱의 문서화된 MCP 설정 방식으로 같은 서버 명령(`.mcp-venv`의 Python으로 `scripts/restoration_mcp.py`)을 등록하고, 등록 결과를 사용자에게 확인받는다.
+
 사용 중인 앱을 현재 문맥에서 확인한다. 모르면 앱 이름만 한 번 묻는다. Codex·Claude Code 등의 다른 호스트에 Antigravity의 JSON 설정을 그대로 쓰지 않는다. 다른 호스트는 해당 호스트의 문서화된 MCP·스킬 경로와 실제 서브에이전트 증거 계약을 별도 검증해야 하며, 이 릴리스에서 사용 검증이 끝났다고 말하지 않는다.
 
 Windows, 한글의 설치/COM 등록, Python 3.12, TeX 실행 파일, TikZ와 필요한 글꼴을 확인한다. 없는 유료 소프트웨어·글꼴은 정식 설치가 필요하다고 쉽게 설명한다. Python·TeX가 없으면 공식 배포처와 사용자가 허용한 설치 방법을 이용한다. 광범위한 레지스트리 변경, 보안 기능 해제, API 충전이나 구독 구매는 자동으로 하지 않는다. 비밀 키를 채팅에 요청하거나 설정 내용을 통째로 출력하지 않는다.
 
 ## 2. 배포물과 설치 위치
 
-릴리스: `https://github.com/acb0808/hwp-exam-restoration/releases/tag/v2.7.3`
+릴리스: `https://github.com/acb0808/hwp-exam-restoration/releases/tag/v2.7.9`
 
-1. 배포 ZIP `hwp-exam-restoration-2.7.3.zip`과 `SHA256SUMS.txt`를 받는다. ZIP의 SHA-256을 비교한 뒤 별도 임시 폴더에 푼다. ZIP 경로가 대상 폴더 밖으로 벗어나지 않게 한다.
-2. 내부 `hwp-exam-restoration/BUNDLE-MANIFEST.json`의 version이 `2.7.3`인지, 명시된 파일 해시가 모두 맞는지 확인한다. ZIP 전체에는 사용자 안내 문서도 들어 있다.
+1. 배포 ZIP `hwp-exam-restoration-2.7.9.zip`과 `SHA256SUMS.txt`를 받는다. ZIP의 SHA-256을 비교한 뒤 별도 임시 폴더에 푼다. ZIP 경로가 대상 폴더 밖으로 벗어나지 않게 한다.
+2. 내부 `hwp-exam-restoration/BUNDLE-MANIFEST.json`의 version이 `2.7.9`인지, 명시된 파일 해시가 모두 맞는지 확인한다. ZIP 전체에는 사용자 안내 문서도 들어 있다.
 3. Antigravity의 기존 스킬 위치를 확인한다. 기존 설치가 없으면 사용자 프로필의 `.gemini/config/skills/hwp-exam-restoration`을 사용하고, 설치 경로를 사용자에게 남긴다. 해당 호스트에서 자동 검색을 확인하지 못하면 작업 요청에 설치된 `SKILL.md` 절대 경로를 명시한다. 같은 스킬을 여러 위치에 중복 설치하지 않는다.
 4. 기존 설치가 있으면 날짜가 붙은 별도 백업을 만든다. `.venv`, `.mcp-venv`, 사용자 job/결과물을 다른 PC에서 복사하지 않는다. 기존 사용자 결과물을 삭제하지 않는다. 새 스킬 폴더에는 번들 전체를 넣으며 일부 파일만 추출하지 않는다.
+
+### v2.7.3에서 업데이트할 때
+
+- 새로 설치할 프로그램이나 Python 패키지는 없다. 두 요구 목록(`requirements.txt`, `requirements-mcp.txt`)은 v2.7.3과 같다. 기존 `.mcp-venv`를 그대로 써도 되며, 다시 만들 때도 같은 목록을 쓴다. 자세한 비교는 [의존성 변화](docs/DEPENDENCIES.md)에 있다.
+- 기존 스킬 폴더를 백업한 뒤 번들 전체로 바꾼다. `.mcp-venv`와 사용자 작업 폴더는 지우지 않는다.
+- 역할 파일은 스킬 폴더 안에 있어 함께 바뀐다. 예전에 `scripts/install_reader_agent.py`로 `.gemini/config/agents/`에 사본을 설치해 두었다면 그 사본도 같은 명령으로 다시 설치한다(`--agent-name hwp-restoration-reader`, `hwp-restoration-reviewer`).
+- MCP 서버를 재연결하고 첫 `hwp_prepare` 응답의 `runtime_version`이 `2.7.9`인지 확인한다.
+- v2.7.3으로 진행 중이던 작업은 그 버전으로 마무리하는 것을 권한다. 버전이 섞인 작업은 시험하지 않았다.
 
 ## 3. 전용 Python 환경
 
@@ -55,7 +65,7 @@ TeX가 PATH에 없으면 두 명령에 `--engine "실제 TeX 실행 파일의 �
 
 TeX 확인은 `scripts/tikz_render.py render examples/tikz-smoke.tex "비어 있는 새 진단 출력 폴더"`로 수행할 수 있다. 이 명령은 환경 설치·진단용이다. 사용자의 실제 복원을 Python/COM/CLI로 우회하지 않는다.
 
-설치만 요청받았다면 사용자 시험지 전송이나 유료 벤치마크를 자동 실행하지 않는다. 첫 복원 요청의 `hwp_prepare` 응답에서 `runtime_version=2.7.3`을 확인한다. 다르면 제작자를 배정하기 전에 재연결한다. 실제 사용자 샘플을 MCP로 출력·검수한 뒤에야 해당 PC의 한글·폰트까지 검증됐다고 보고한다.
+설치만 요청받았다면 사용자 시험지 전송이나 유료 벤치마크를 자동 실행하지 않는다. 첫 복원 요청의 `hwp_prepare` 응답에서 `runtime_version=2.7.9`을 확인한다. 다르면 제작자를 배정하기 전에 재연결한다. 실제 사용자 샘플을 MCP로 출력·검수한 뒤에야 해당 PC의 한글·폰트까지 검증됐다고 보고한다.
 
 마지막에는 쉬운 한국어로 다음을 짧게 전달한다.
 

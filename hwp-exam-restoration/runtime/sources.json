@@ -4,7 +4,7 @@
     {
       "path": "hwp_automation/scripts/hwpx_builder.py",
       "source": "hwp-automation/scripts/hwpx_builder.py",
-      "sha256": "d79963c757f58fb11a16cf904ad82488482c960e3293ce2753f13aec665a7644"
+      "sha256": "b8223bb30d774c075fd721636f9aa2d446aacb5ae81e039df2054fae18f8b307"
     },
     {
       "path": "hwp_automation/scripts/equation_converter.py",
@@ -90,7 +90,7 @@
     {
       "path": "hwp_automation/template_base/Preview/PrvText.txt",
       "source": "hwp-automation/template_base/Preview/PrvText.txt",
-      "sha256": "d4cacef5e321c3e9c53c3d8f3993d3de88e1e14479b7a8a2907d233a7e23c46e"
+      "sha256": "da05a5253ee5d563ab8df474a1da42df37e50d58423f201ae6c65ab176476afd"
     },
     {
       "path": "hwp_automation/template_base/Scripts/headerScripts.js",
@@ -120,53 +120,53 @@
     },
     {
       "path": "latex_to_hwpeqn/__init__.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/__init__.py",
-      "sha256": "c604e93380347d090685a8872977342c130e697a9457a03ddf09c1adba5fd752"
+      "source": "repo latex_to_hwpeqn/__init__.py (0.3.0 + exam readability spacing)",
+      "sha256": "d00f3e11216c3386f8606a39c7c1c8772b6229a107c3fcc7a927da47526766da"
     },
     {
       "path": "latex_to_hwpeqn/__main__.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/__main__.py",
-      "sha256": "6f84baf07f4a5545d9a7f52b74bdd17ec0c6689b3b7e4546c2a675e2cd9e6e5a"
+      "source": "repo latex_to_hwpeqn/__main__.py (0.3.0 + exam readability spacing)",
+      "sha256": "c3b166c94db9b84c779f06ca46b1d56107c0b7a6e4c0b7b6a6e9a47ce8afd571"
     },
     {
       "path": "latex_to_hwpeqn/document.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/document.py",
-      "sha256": "d3446e67c708ec43214cf50c097c6f3951e0bb9a2f2947e1c955aff18cd9238a"
+      "source": "repo latex_to_hwpeqn/document.py (0.3.0 + exam readability spacing)",
+      "sha256": "543f338961dc1ad408bfb892a829e348aeaad7741113196bfdf2d90e37b8739d"
     },
     {
       "path": "latex_to_hwpeqn/editor.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/editor.py",
-      "sha256": "d30e872fac316e2a84fcbaad596b1caedfe76447ef86e8487eb0461a754b49ff"
+      "source": "repo latex_to_hwpeqn/editor.py (0.3.0 + exam readability spacing)",
+      "sha256": "70fdc5febcd226fab381e14f6d0a455cab3d73072a5ce5c3637cb60dd6843857"
     },
     {
       "path": "latex_to_hwpeqn/model.py",
       "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/model.py",
-      "sha256": "3168b02d20e6abf603c0f3a97011b275dd45a7af0e03d1ce609910d449c3e994"
+      "sha256": "ff3d8510dea7bb38d9b61aa9523c9a67d863358902d350abae1c513951b40f01"
     },
     {
       "path": "latex_to_hwpeqn/parser.py",
       "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/parser.py",
-      "sha256": "58d47df3363047ba81a3e248053582986ac294d3734de4fdae426b00400f2ff1"
+      "sha256": "4b7fb77542f3c49ede98a5d4b9eaf31ad10dfe7a666f596c3facc7ba4611e076"
     },
     {
       "path": "latex_to_hwpeqn/renderer.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/renderer.py",
-      "sha256": "7fec1537f8d0a7619c0c0ba84ed6df0ddf9f0d733fa4a62d8d9c4c8525d20114"
+      "source": "repo latex_to_hwpeqn/renderer.py (0.3.0 + exam readability spacing)",
+      "sha256": "e797c532548f94923c5b76c99e692dc96b592024d7b403da5091c15ac43da7d4"
     },
     {
       "path": "latex_to_hwpeqn/symbols.py",
       "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/symbols.py",
-      "sha256": "33d4a80c699b2281679c25ad1fa7d186142d17fde0ec92a649a74f381c4b5e82"
+      "sha256": "f770e94da09dbe5d6e2307ffbe69f6f0a5775f5f0b2083218f10a5db01c8b212"
     },
     {
       "path": "latex_to_hwpeqn/schemas/editor-document-v1.schema.json",
       "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/schemas/editor-document-v1.schema.json",
-      "sha256": "0bc949b7b9331ecaf32988e5a4867c5e3e6726b52ac955fb8f8b2b6efe8ffb24"
+      "sha256": "cd914332d3e3bd14f466fce733291fa83a63b28fd570ffa75e5471f4b7dd85f9"
     },
     {
       "path": "latex_to_hwpeqn/schemas/editor-equation-v1.schema.json",
       "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/schemas/editor-equation-v1.schema.json",
-      "sha256": "021682c05e142688bcf5588e20045fa1b73bf16cbb1b00b89ec90177fc4844f8"
+      "sha256": "03c6780dc8f51220e6a8e764ec716cc8bd3b3d9fb373031a3750fb62622cddbe"
     },
     {
       "path": "native/src/academy/__init__.py",
@@ -181,7 +181,7 @@
     {
       "path": "native/src/academy/documents/hwp_adapter.py",
       "source": "using-math-edu/runtime/src/academy/documents/hwp_adapter.py",
-      "sha256": "af8b242e5e21ff66e272af8e430c27232c2f86174516079711f6a28a81c36c78"
+      "sha256": "4e97202abc4717d5499c7e9dff64c7ffe9f44e76e157ccd4fea567eed1a4e480"
     },
     {
       "path": "native/src/academy/documents/hwp_desktop.py",
@@ -196,7 +196,8 @@
     {
       "path": "tikz_render.py",
       "source": "diagram-restoration/scripts/tikz_render.py",
-      "sha256": "5fb64bad0654d6d45efed73e1d6f38e784ec22433dfab9b08c57db4d857f4c83"
+      "sha256": "a2b681847f65eb4d363d61929bb243ec1b40e4399d0e59a744c4acaef49b355a"
     }
-  ]
+  ],
+  "digest": "runtime_paths.content_digest: sha256; text files hashed with LF line ends"
 }

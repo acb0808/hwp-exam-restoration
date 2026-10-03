@@ -16,7 +16,7 @@ class TikzAnnotationToolsTests(unittest.TestCase):
         doc=single.diagram_document(PICTURE)
         for command in ('ExamLabel','ExamRightAngle','ExamLengthArc','ExamTicks'):
             self.assertIn('\\newcommand{\\'+command+'}',doc)
-        self.assertIn(r'\usetikzlibrary{decorations.markings}',doc)
+        self.assertIn(r'\usetikzlibrary{decorations.markings,shapes.arrows}',doc)  # shapes.arrows: \ExamImplies (v2.7.8)
         self.assertNotIn(r'\input',doc)
         self.assertEqual(single.diagram_document(doc),doc)
 

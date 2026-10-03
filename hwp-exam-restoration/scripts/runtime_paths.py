@@ -4,6 +4,15 @@ import sys
 
 SKILL_ROOT=Path(__file__).resolve().parents[1]
 RUNTIME=SKILL_ROOT/'runtime'
+BINARY_SUFFIXES={'.png','.jpg','.jpeg','.gif','.bmp','.hwp','.hwpx','.pdf','.zip','.whl','.ttf','.otf','.bin'}
+
+def content_digest(path):
+    """SHA-256 used for every bundled-file check. Text is hashed with LF line ends, so a git checkout
+    that converts line endings (Windows core.autocrlf, or LF on other systems) is not reported as tampering."""
+    import hashlib
+    path=Path(path);data=path.read_bytes()
+    if path.suffix.lower() not in BINARY_SUFFIXES and b'\x00' not in data:data=data.replace(b'\r\n',b'\n')
+    return hashlib.sha256(data).hexdigest()
 
 def automation_root():
     root=RUNTIME/'hwp_automation'

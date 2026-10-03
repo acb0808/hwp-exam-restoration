@@ -30,7 +30,7 @@ def main(argv=None) -> int:
     parser.add_argument('--document', metavar='FILE', help='Convert delimited formulas in plain text to separate JSON segments (or - for stdin).')
     parser.add_argument('--editor-json', action='store_true', help='Preserve editable structure and layout requirements in a versioned JSON handoff.')
     parser.add_argument('--json', action='store_true', help='Emit structured result including diagnostics.')
-    parser.add_argument('--matrix-padding', type=int, choices=range(9), default=1,
+    parser.add_argument('--matrix-padding', type=int, choices=range(9), default=2,
                         help='Visible HWP spaces on each side of a matrix cell (default: 1).')
     parser.add_argument('--allow-layout-approximation', action='store_true', help='Allow style and row-spacing loss with explicit warnings; strict mode still rejects them.')
     parser.add_argument('--warnings-as-errors', action='store_true', help='Refuse approximations as well as errors.')

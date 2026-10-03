@@ -15,7 +15,7 @@ class SingleReviewTests(unittest.TestCase):
         with fitz.open() as doc: doc.new_page();doc.save(source)
         result=self.call('prepare',source=str(source),question_pages=[1]);self.assertEqual(result['status'],'prepared',result)
         self.assertEqual(result['spawn_requests'][0]['role'],'producer')
-        self.call('assign',page=1,worker_id='producer-1',evidence='Actual test worker creation response')
+        self.call('assign',page=1,worker_id='producer-1',evidence='Actual test worker creation response: producer-1')
 
     def call(self,action,**params): return dispatch(action,{'job':str(self.root),**params})
 
@@ -161,7 +161,7 @@ class SingleReviewTests(unittest.TestCase):
         with fitz.open() as doc:doc.new_page();doc.new_page();doc.save(source)
         self.call('prepare',source=str(source),question_pages=[1,2])
         for n in (1,2):
-            self.call('assign',page=n,worker_id='owner-'+str(n),evidence='synthetic worker')
+            self.call('assign',page=n,worker_id='owner-'+str(n),evidence='synthetic worker owner-'+str(n))
             self.assertEqual(self.call('submit_reading',page=n,markdown=MD)['status'],'accepted')
             self.assertEqual(self.call('compose',page=n,layout_markdown=LAYOUT)['status'],'accepted')
         self.fixture_native(compose=False)

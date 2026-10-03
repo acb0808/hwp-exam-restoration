@@ -217,7 +217,13 @@ def main(argv=None):
         from native_layout import render_native
         config = {'adapter_runtime':str(native_root())}
         if args.runtime_site_packages is not None:config['runtime_site_packages']=str(args.runtime_site_packages)
-        result = render_native(receipt['output'], args.run_dir, config=config)
+        # Builds of other jobs on this PC wait here for their turn instead of failing on the busy session.
+        from restoration_native_queue import turn, QueueTimeout
+        try:
+            with turn(args.run_dir, receipt['output']):
+                result = render_native(receipt['output'], args.run_dir, config=config)
+        except QueueTimeout:
+            return blocked_before_native(args.run_dir,'native_export_queue_timeout')
         result['job'] = str(args.job.resolve())
         result['pages_sha256'] = expected
         result['expected_source_pages'] = len(pages)

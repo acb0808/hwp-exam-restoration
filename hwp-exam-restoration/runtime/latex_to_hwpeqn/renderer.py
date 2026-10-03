@@ -4,10 +4,59 @@ from __future__ import annotations
 from .model import Node
 from .symbols import MATH_ALPHABETS
 
+# Readability spacing follows Korean exam typesetting (2,260 scripts from published
+# KICE/office exam HWP files): a quarter space (`) before a prime and before the dx of
+# an integral, two after a comma, one after a function name taking a bare argument.
+QUARTER = '`'
+SPACED_FUNCTIONS = frozenset('sin cos tan cot sec csc cosec arcsin arccos arctan sinh cosh tanh coth log ln lg exp'.split())
+INTEGRALS = frozenset(('int', 'oint', 'DINT', 'TINT', 'ODINT', 'OTINT'))
 
-def render(node: Node, matrix_padding: int = 1, _style: str = 'it') -> str:
+
+def _unwrap(n: Node) -> Node:
+    while n.kind in ('group', 'seq') and len(n.children) == 1:
+        n = n.children[0]
+    return n
+
+
+def _prime_count(sup: Node) -> int:
+    """Number of primes when a superscript holds only primes (f', f'' or an explicit prime command)."""
+    n = sup.children[0] if sup.kind == 'group' else sup
+    items = n.children if n.kind == 'seq' else (n,)
+    if items and all(_unwrap(c).kind == 'atom' and _unwrap(c).value == 'prime' for c in items):
+        return len(items)
+    return 0
+
+
+def _function_name(n: Node) -> bool:
+    n = n.children[0] if n.kind == 'scripts' else n
+    return n.kind == 'atom' and n.value in SPACED_FUNCTIONS
+
+
+def _is_integral(n: Node) -> bool:
+    n = n.children[0] if n.kind == 'scripts' else n
+    return n.kind == 'atom' and n.value in INTEGRALS
+
+
+def _space(n: Node | None) -> bool:
+    return n is not None and n.kind == 'atom' and bool(n.value) and set(n.value) <= set('`~ ')
+
+
+def _bare_argument(n: Node) -> bool:
+    """A function argument written without parentheses: sin x, log_2 8, cos 2x, sin theta."""
+    if n.kind in ('group', 'frac', 'root', 'math_alphabet', 'font', 'accent'):
+        return True
+    if n.kind == 'scripts':
+        return _bare_argument(n.children[0])
+    return n.kind in ('atom', 'literal') and n.value[:1].isalnum() and n.value not in INTEGRALS
+
+
+def render(node: Node, matrix_padding: int = 2, _style: str = 'it', _script: bool = False) -> str:
     def r(n: Node) -> str:
-        return render(n, matrix_padding, _style)
+        return render(n, matrix_padding, _style, _script)
+
+    def rs(n: Node) -> str:
+        # Sub/superscripts stay tight (a_{i,j}, x^{2}).
+        return '{' + render(n, matrix_padding, _style, True) + '}'
 
     def br(n: Node) -> str:
         return '{' + r(n) + '}'
@@ -30,14 +79,25 @@ def render(node: Node, matrix_padding: int = 1, _style: str = 'it') -> str:
                 # Multiple punctuation dots are not a single decimal token.
                 parts.extend(token)
             digits.clear()
-        for child in children:
-            if child.kind == 'style_declaration':
-                continue
+        items = [c for c in children if c.kind != 'style_declaration']
+        for index, child in enumerate(items):
+            following = items[index + 1] if index + 1 < len(items) else None
             if child.kind == 'literal' and child.value in '0123456789.':
                 digits.append(child.value)
-            else:
-                flush_number()
-                parts.append(r(child))
+                continue
+            flush_number()
+            text = r(child)
+            previous = items[index - 1] if index else None
+            if not _script and following is not None and not _space(following):
+                if child.kind == 'literal' and child.value == ',':
+                    text += QUARTER * 2
+                elif _function_name(child) and _bare_argument(following):
+                    text += QUARTER
+                elif (child.kind == 'literal' and child.value == 'd' and following.kind == 'literal'
+                      and following.value.isalpha() and not _space(previous)
+                      and any(_is_integral(c) for c in items[:index])):
+                    text = QUARTER * 2 + ' ' + text
+            parts.append(text)
         flush_number()
         return ' '.join(parts)
     if kind == 'group':
@@ -58,7 +118,13 @@ def render(node: Node, matrix_padding: int = 1, _style: str = 'it') -> str:
         # Commands with arguments must be grouped before adding scripts.
         protected = base.kind in ('delimited', 'root', 'accent', 'binom', 'overset', 'environment', 'prefix', 'modulo')
         text = br(base) if protected else r(base)
-        return text + ('_' + br(sub) if sub.kind != 'empty' else '') + ('^' + br(sup) if sup.kind != 'empty' else '')
+        text += '_' + rs(sub) if sub.kind != 'empty' else ''
+        primes = _prime_count(sup) if sup.kind != 'empty' else 0
+        if primes:
+            # A superscripted prime renders as a tiny raised tick in Hancom; the inline
+            # glyph after a quarter space is what printed exams use (f`prime).
+            return text + QUARTER + ' '.join(['prime'] * primes)
+        return text + ('^' + rs(sup) if sup.kind != 'empty' else '')
     if kind == 'accent':
         return value + ' ' + br(children[0])
     if kind == 'math_alphabet':

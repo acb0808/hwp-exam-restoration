@@ -2,12 +2,14 @@
 from pathlib import Path
 import copy,json,hashlib
 
+from runtime_paths import content_digest  # line-ending-neutral: template XML survives git checkouts
+
 def load_template(root):
     root=Path(root).resolve(strict=True)
     profile=json.loads((root/'profile.json').read_text(encoding='utf-8'))
     for relative,expected in profile['files'].items():
         p=(root/relative).resolve(strict=True)
-        if not p.is_relative_to(root) or hashlib.sha256(p.read_bytes()).hexdigest()!=expected:
+        if not p.is_relative_to(root) or content_digest(p)!=expected:
             raise ValueError('template_asset_hash_mismatch')
     return root,profile
 

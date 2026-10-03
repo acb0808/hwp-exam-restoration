@@ -23,6 +23,24 @@ def submit_call(root, page):
             'markdown_path': str(root / 'workers' / f'page-{page:04d}' / 'reading.md')}}
 
 
+def tool_examples(root, page):
+    """Exact call shapes so producers need not open MCP schema files."""
+    return ('## 도구 호출 형식 (스키마 파일을 열지 않아도 됩니다)\n\n'
+            '- 확대: `hwp_inspect` ' + json.dumps({'job': str(root), 'page': page, 'requests': [
+                {'question_id': 'q1', 'id': 'q1-sign', 'bbox_px': ['x', 'y', '폭', '높이'], 'reason': '불명확한 이유'}]}, ensure_ascii=False)
+            + ' (필요한 곳을 한 번에 모아 요청; 여러 개면 라벨 붙은 한 장으로 반환)\n'
+            '- 도형 렌더: 도형마다 `' + str(root / 'workers' / f'page-{page:04d}' / 'ID.tex') + '` 파일을 쓰고(ID는 reading.md의 figure ID) '
+            '첫 줄에 `% width_mm=50 source_bbox_px=x,y,폭,높이`(원본 픽셀 영역)를 적은 뒤 `hwp_render_figures` '
+            + json.dumps({'job': str(root), 'page': page}, ensure_ascii=False)
+            + ' 만 호출합니다. LaTeX를 JSON에 넣거나 이스케이프하지 않습니다. 고칠 때는 그 파일만 부분 수정하고 같은 호출을 반복합니다. '
+            '너비는 원본에서 차지한 비율로 정하고, 단 폭을 넘으면 엔진이 줄여 알려 줍니다(width_clamped). '
+            '원본 crop과 렌더는 비교 이미지로 반환되며 새 도형이 여럿이면 compare_sheets 한두 장으로 묶입니다.\n'
+            '- 도형 검수: `hwp_review_figures` ' + json.dumps({'job': str(root), 'page': page, 'batch_path': '반환된 값', 'reviews': [
+                {'id': 'q1-figure-1', 'status': 'passed', 'issues': [],
+                 'checks': {'geometry': 'passed', 'labels': 'passed', 'marks': 'passed', 'source_comparison': 'passed'}}]}, ensure_ascii=False) + '\n'
+            '- 이 도구 설명·SKILL.md·역할 파일은 다시 열지 않습니다. 필요한 파일은 한 턴에 함께 엽니다.\n\n')
+
+
 def task_contract(root, page, enabled):
     return ('## 이 작업에서 할 일\n\n' + answer_mode(enabled) + '\n\n'
             '아래 Markdown을 작성한 뒤 바로 제출하세요. 지원 여부를 확인하려고 설치/설정/내부 Python 파일을 읽지 않습니다.\n'
@@ -94,7 +112,7 @@ def author_help(root, page, topic='writing'):
     else:
         result.update(rules=[
             'reading.md의 ![](figure:ID)와 같은 ID.tex를 배정 폴더에 저장합니다.',
-            'hwp_render_figures에 자기 쪽 전체 도형의 id,question_id,width_mm,latex_path를 한 번에 제출합니다.',
+            'ID.tex 첫 줄에 % width_mm=NN source_bbox_px=x,y,폭,높이 를 적고 hwp_render_figures(job,page)만 호출합니다. 엔진이 파일에서 목록을 만듭니다.',
             '반환된 pending review_tasks만 실제 원본과 비교합니다. 렌더 성공은 검수 통과가 아닙니다.',
             'hwp_review_figures는 새 batch_path와 관찰한 reviews를 씁니다. checks의 geometry,labels,marks,source_comparison은 정확히 passed/failed/not_verified입니다.',
             '모든 checks가 passed이고 실제 문제가 없을 때만 status=passed,issues=[]입니다. 변경 없는 검수는 엔진이 재사용합니다.'],

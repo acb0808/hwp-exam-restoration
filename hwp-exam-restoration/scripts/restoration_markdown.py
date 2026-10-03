@@ -9,6 +9,7 @@ import re
 from restoration_reading import validate_reading
 
 _ID = r'[A-Za-z0-9][A-Za-z0-9_-]*'
+CHOICE_FIGURE_HELP = ('figures cannot go inside choices. If the choices are pictures, put ONE standalone line ![](figure:QID-choices) after the stem, draw every choice picture with its printed label (①..⑤) in that TikZ in the source arrangement, and omit the ::: choices block')
 _ESCAPES = '\\$|#![]*_`<>'
 
 
@@ -179,6 +180,8 @@ def parse_reading_markdown(text, *, page, worker_id, source_sha256):
                     for row_number, row in block_lines:
                         if not row.strip():
                             _error(row_number, 'blank choice row is unsupported')
+                        if '![](figure:' in row:
+                            _error(row_number, CHOICE_FIGURE_HELP)
                         if row.lstrip().startswith((':::', '#', '>', '![')):
                             _error(row_number, 'nested structures are unsupported in choices')
                         cells = _choice_cells(row, row_number)
@@ -187,14 +190,21 @@ def parse_reading_markdown(text, *, page, worker_id, source_sha256):
                         rows.append(cells)
                     if not rows:
                         _error(start, 'empty choices block')
+                    if all(len(cell) == 1 and cell[0]['kind'] == 'text' and re.fullmatch(r'\s*[①②③④⑤]\s*', cell[0]['text'])
+                           for row in rows for cell in row):
+                        # Bare labels would print apart from their pictures.
+                        _error(start, CHOICE_FIGURE_HELP)
                     question['content'].append({'kind': 'choices', 'columns': int(name[-1]), 'rows': rows})
                 else:
                     contents, chunk = [], []
                     for row_number, row in block_lines + [(number, '')]:
-                        if not row.strip():
+                        marker = re.fullmatch(r'!\[\]\(figure:(' + _ID + r')\)', row.strip())
+                        if not row.strip() or marker:
                             if chunk:
                                 contents.append(_paragraph(chunk))
                                 chunk = []
+                            if marker:  # a printed <보기> diagram stays inside its box
+                                contents.append({'kind': 'paragraph', 'runs': [], 'figure_ref': marker.group(1)})
                         else:
                             chunk.append((row_number, row))
                     if not contents:
@@ -257,8 +267,6 @@ def _write_block(block):
             return '![](figure:' + block['figure_ref'] + ')'
         return _write_runs(block['runs'])
     if kind == 'box':
-        if any('figure_ref' in child for child in block['content']):
-            raise ValueError('Markdown cannot encode a figure nested inside a box')
         return ('::: box' + (' ' + _escape(block['title']) if block['title'] else '') + '\n' +
                 '\n\n'.join(_write_block(child) for child in block['content']) + '\n:::')
     if any(any(run['kind'] == 'break' for run in cell) for row in block['rows'] for cell in row):

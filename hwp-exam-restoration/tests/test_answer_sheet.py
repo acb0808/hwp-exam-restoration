@@ -32,7 +32,7 @@ class AnswerSheetTests(unittest.TestCase):
         self.root=Path(self.tmp.name)/'job';source=Path(self.tmp.name)/'source.pdf'
         with fitz.open() as doc:doc.new_page();doc.save(source)
         self.call('prepare',source=str(source),question_pages=[1],include_answers=True)
-        self.call('assign',page=1,worker_id='producer',evidence='Actual fixture worker response')
+        self.call('assign',page=1,worker_id='producer',evidence='Actual fixture worker response: producer')
     def call(self,action,**kwargs):return dispatch(action,{'job':str(self.root),**kwargs})
     def submit(self,md=MD):
         result=self.call('submit_reading',page=1,markdown=md)

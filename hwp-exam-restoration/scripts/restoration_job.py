@@ -11,6 +11,7 @@ import math
 import os
 from pathlib import Path
 import tempfile
+import time
 import uuid
 
 MAX_ARTIFACT_BYTES = 200 * 1024 * 1024
@@ -52,15 +53,65 @@ def save_json(path,value):
     finally:
         if os.path.exists(name):os.unlink(name)
 
+_HELD=set()  # job roots this process is inside right now
+STALE_LOCK_SECONDS=120  # a lock is held for file writes only; an unreadable one this old was abandoned
+
+def _pid_alive(pid):
+    """False only when the process is known to be gone."""
+    if os.name=='nt':
+        import ctypes
+        handle=ctypes.windll.kernel32.OpenProcess(0x1000,False,pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:return ctypes.windll.kernel32.GetLastError()!=87  # 87: no such process
+        try:
+            code=ctypes.c_ulong()
+            return not ctypes.windll.kernel32.GetExitCodeProcess(handle,ctypes.byref(code)) or code.value==259
+        finally:ctypes.windll.kernel32.CloseHandle(handle)
+    try:os.kill(pid,0)
+    except ProcessLookupError:return False
+    except OSError:return True
+    return True
+
+def _abandoned(path,root):
+    """A lock left by a stopped run: its owner is gone, or it is this process's own from a section it already left."""
+    try:text=path.read_text(encoding='ascii',errors='replace').strip();age=time.time()-path.stat().st_mtime
+    except OSError:return False
+    if not text.isdigit():return age>STALE_LOCK_SECONDS
+    pid=int(text)
+    if pid==os.getpid():return str(root) not in _HELD
+    if not _pid_alive(pid):return True
+    # The pid may already belong to a new process (Windows reuses them at once): the owner cannot be younger than its lock.
+    try:
+        import psutil
+        return psutil.Process(pid).create_time()>path.stat().st_mtime+2
+    except ImportError:return False
+    except Exception:return False
+
 @contextmanager
 def _locked(root):
     path=root/'.job.lock'
-    try:fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-    except FileExistsError:raise ValueError('job_busy_or_interrupted_lock_requires_review') from None
+    for attempt in (0,1):
+        try:fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);break
+        except FileExistsError:
+            # Stopping the CLI in the middle of a write used to leave this file, and the job then refused every call.
+            if attempt==0:
+                try:seen=path.read_bytes()
+                except OSError:seen=None
+                if seen is not None and _abandoned(path,root):
+                    try:
+                        if path.read_bytes()==seen:path.unlink()  # not a lock another process took meanwhile
+                    except OSError:pass
+                    continue
+            raise ValueError('job_busy_or_interrupted_lock_requires_review') from None
+    _HELD.add(str(root))
     try:
         os.write(fd,str(os.getpid()).encode());os.close(fd)
         yield
-    finally:path.unlink()
+    finally:
+        _HELD.discard(str(root))
+        for _ in range(50):  # a sync client or scanner may hold the file for a moment (job folders often sit in OneDrive)
+            try:path.unlink();break
+            except FileNotFoundError:break
+            except PermissionError:time.sleep(0.02)
 
 def _artifact(root,record):
     if not isinstance(record,dict) or not isinstance(record.get('path'),str):raise ValueError('invalid_artifact_record')
@@ -110,6 +161,11 @@ def _manifest(root):
         if assignment['mode']=='subagent':
             if assignment['worker_id'] in subagent_workers:raise ValueError('one_page_per_independent_worker')
             subagent_workers.add(assignment['worker_id'])
+            if assignment.get('agent_id') is not None:
+                # Single-review slots keep worker_id stable; the actual spawned ID must still be unique.
+                if not isinstance(assignment['agent_id'],str) or not assignment['agent_id'].strip() or assignment['agent_id'] in subagent_workers:
+                    raise ValueError('one_page_per_independent_worker')
+                subagent_workers.add(assignment['agent_id'])
             if assignment.get('ab_session'):
                 reader_b=assignment.get('reader_b')
                 if not isinstance(reader_b,str) or not reader_b.strip() or reader_b in subagent_workers:
@@ -153,7 +209,7 @@ def prepare(source:Path,job_dir:Path,*,dpi=None,workflow=None)->dict:
                 if page.rect.width*page.rect.height*(resolution/72)**2>40_000_000:raise ValueError('page_pixel_limit')
                 path=image_dir/f'page-{index+1:04d}.png'
                 pix=page.get_pixmap(matrix=fitz.Matrix(resolution/72,resolution/72),alpha=False)
-                pix.save(path)
+                pix.save(path);compact_page_image(path)
                 pages.append({'page':index+1,'width_mm':page.rect.width*25.4/72,'height_mm':page.rect.height*25.4/72,
                               'image':{'path':path.relative_to(root).as_posix(),'sha256':digest(path)},'dpi':resolution})
     else:
@@ -306,6 +362,15 @@ def revise(job_dir:Path,result:Path)->dict:
     """Accept a worker's explicit same-assignment revision; preserve prior bytes."""
     return accept(job_dir,result,replace=True)
 
+def compact_page_image(path):
+    """Optional 16-level grayscale page image (HWP_PAGE_IMAGE_MODE=gray16): about a third of the RGB bytes,
+    same pixels, thin print strokes kept. Opt-in until measured on each host."""
+    import os
+    if os.environ.get('HWP_PAGE_IMAGE_MODE')!='gray16':return
+    from PIL import Image
+    with Image.open(path) as im:gray=im.convert('L')
+    gray.quantize(16,dither=Image.Dither.NONE).save(path,optimize=True,bits=4)
+
 def assemble(job_dir:Path)->list:
     root=Path(job_dir).resolve(strict=True)
     with _locked(root):
@@ -322,4 +387,5 @@ def assemble(job_dir:Path)->list:
             from restoration_single import validate_accepted_result as validate_single
             validate_single(root,value,matches[0]);result.append(value)
         from restoration_answers import append_answer_page
-        return append_answer_page(root,manifest,result)
+        from restoration_single import append_review_notes
+        return append_review_notes(root,append_answer_page(root,manifest,result))
