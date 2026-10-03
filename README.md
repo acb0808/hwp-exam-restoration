@@ -22,7 +22,7 @@
 
 ## 설치
 
-코드를 직접 편집할 필요는 없습니다. PC의 파일과 프로그램을 사용할 수 있는 AI 에이전트에게 다음 요청을 보내세요.
+처음 설치하는 경우 PC의 파일과 프로그램을 사용할 수 있는 AI 에이전트에게 다음 요청을 보내세요.
 
 ```text
 https://github.com/acb0808/hwp-exam-restoration 의 v2.7.9를 설치해주세요.
@@ -31,6 +31,22 @@ https://github.com/acb0808/hwp-exam-restoration 의 v2.7.9를 설치해주세요
 Python 환경과 hwp-restoration MCP를 준비하고, 제 앱에서 연결되도록 설정해주세요.
 제가 직접 해야 하는 앱 재시작이나 재연결이 있으면 쉬운 말로 알려주세요.
 설정에 비밀 키가 있으면 출력하지 말고, 기존 설정 전체를 교체하지 마세요.
+```
+
+### 기존 v2.7.3 사용자: 업데이트 요청문
+
+v2.7.3을 Antigravity에서 사용 중이라면 신규 설치 요청 대신 아래 문구를 보내세요. v2.7.3은 보통 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration`에 설치돼 있으므로, 에이전트가 실제로 사용하는 스킬 경로를 먼저 확인하게 합니다.
+
+```text
+설치된 hwp-exam-restoration 스킬을 https://github.com/acb0808/hwp-exam-restoration 의 v2.7.9로 업데이트해주세요.
+저는 코딩을 모릅니다. 저장소의 AGENT_INSTALL.md에서 “v2.7.3에서 업데이트할 때”를 먼저 읽고 그대로 진행해주세요.
+현재 사용 중인 SKILL.md와 Antigravity가 검색하는 스킬 경로를 확인하고, 바꾸기 전에 스킬 폴더와 MCP 설정을 날짜가 있는 백업 위치에 보관해주세요.
+Antigravity가 %USERPROFILE%\.agents\skills를 검색하는 것이 확인되면 새 버전을 그곳에 설치하고 MCP를 새 경로로 다시 연결해주세요. 이전 %USERPROFILE%\.gemini\config\skills\hwp-exam-restoration 사본은 백업한 뒤 검색 경로에서 제거해 활성 사본을 하나만 남겨주세요.
+%USERPROFILE%\.agents\skills 검색이 확인되지 않으면 실제로 검색되는 기존 위치를 백업한 뒤 그 자리에서 v2.7.9로 교체해주세요. 검색 가능한 두 위치에 버전을 중복 설치하지 마세요.
+기존 .mcp-venv와 제 작업 폴더·결과물, 다른 스킬과 MCP 설정은 보존해주세요. 새 위치로 옮겨 새 .mcp-venv가 필요하면 기존 환경을 복사하지 말고 새로 만들어주세요.
+진행 중인 복원 작업이 있으면 버전을 섞지 않도록 업데이트 전에 알려주세요.
+새 SKILL.md 선택과 hwp-restoration MCP 연결을 확인하고, 다음 복원 작업의 첫 hwp_prepare 응답에서 runtime_version이 2.7.9인지 확인해주세요. 설치만 요청한 경우 시험지로 출력을 시작하지 마세요.
+제가 직접 해야 하는 재연결만 쉬운 말로 알려주고, 마지막에 이전 버전·새 버전·백업 위치·확인된 항목을 알려주세요. API 키나 비밀번호를 묻거나 유료 벤치마크를 실행하지 마세요.
 ```
 
 [설치 안내](AGENT_INSTALL.md)에는 Antigravity와 OpenCode의 MCP 설정 방법이 있습니다. 이 스킬은 Windows, 데스크톱 한컴오피스 한글, Python 3.12가 필요합니다. 도형을 그릴 때는 TeX/TikZ도 필요합니다. 프로그램과 글꼴, AI 서비스 이용권은 포함되지 않습니다.

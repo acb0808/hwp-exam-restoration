@@ -8,6 +8,16 @@ ZIP의 `hwp-exam-restoration` 폴더 전체를 에이전트의 스킬 디렉터�
 
 `pdf2HWP`는 양식의 출처명이다. 외부 프로젝트 경로를 찾거나 `sample/template.hwp`를 별도로 받는 절차가 아니다. 배포물에 개발자의 문서·실행 기록·개인 계정 경로·기존 시험지 원본을 넣지 않는다.
 
+## v2.7.3에서 Antigravity 업데이트
+
+v2.7.3 설치본은 보통 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration`에 있다. 먼저 Antigravity가 실제로 검색하는 위치와 현재 사용하는 `SKILL.md`를 확인하고, 기존 스킬 폴더와 `mcp_config.json`을 검색 경로 밖의 날짜별 백업 폴더에 보관한다.
+
+v2.7.3과 v2.7.9의 `requirements.txt` 및 `requirements-mcp.txt` 내용은 같다. 기존 설치 폴더를 교체하는 경우 `.mcp-venv`를 유지할 수 있다. 새 경로로 옮기는 경우 기존 가상환경은 백업에 남겨두고, 절대 경로가 새 설치 위치에 맞도록 새 `.mcp-venv`를 만든다.
+
+Antigravity가 `%USERPROFILE%\.agents\skills`를 검색한다고 확인된 경우에만 v2.7.9를 그곳에 설치한다. 기존 스킬과 MCP 설정의 백업을 검색 경로 밖에 보관한 채, 이전 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration` 폴더를 검색 경로에서 제거해 활성 사본을 하나만 둔다. 새 폴더에서 `.mcp-venv`를 만들고 그 위치에서 등록기를 실행해 MCP 서버 경로를 바꾼 다음 앱을 재시작·재연결한다. 새 위치의 스킬이 선택되고 서버가 연결됐는지 확인한다. 새 위치가 작동하지 않으면 백업을 복구하고 확인된 기존 위치를 교체한다.
+
+새 경로가 검색되는지 확인할 수 없다면 두 번째 위치를 추가하지 않는다. 실제로 검색되는 기존 폴더를 백업하고 v2.7.9 전체 폴더로 교체한 뒤, 그 위치에서 MCP를 다시 등록한다. 검색 가능한 곳에 두 버전의 복사본을 함께 두지 않는다. 사용자 job·원본·결과물은 스킬 설치 폴더와 별도로 보존한다. 설치만 진행할 때는 시험지를 열지 않으며, 다음 복원 작업에서 첫 MCP 응답의 `runtime_version=2.7.9`를 확인한다.
+
 ## Python 환경
 
 Python 3.12로 **설치한 스킬 폴더 안에서** 다음을 실행한다. 전역 환경에는 설치하지 않는다.

@@ -38,6 +38,15 @@ TeX가 PATH에 없다면 등록 환경에 실제 TeX 실행 파일을 지정한�
 
 3. Antigravity에서 `hwp-restoration` 서버를 재연결한다.
 
+## v2.7.3에서 업데이트할 때
+
+v2.7.3의 Antigravity 스킬은 보통 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration`에 있다. 설치 위치를 추측하지 말고 현재 선택된 `SKILL.md`와 Antigravity가 실제로 검색하는 경로를 확인한다. v2.7.3과 v2.7.9의 Python 요구 목록은 같아 새 프로그램이나 패키지는 필요 없다. 진행 중인 복원은 현재 버전으로 마친 뒤 업데이트한다.
+
+- **Antigravity가 `%USERPROFILE%\.agents\skills`를 검색하는 것이 확인된 경우:** 기존 스킬 폴더와 `%USERPROFILE%\.gemini\config\mcp_config.json`을 날짜가 있는 백업 위치(검색 경로 밖)에 먼저 보관한다. v2.7.9 전체 폴더를 `%USERPROFILE%\.agents\skills\hwp-exam-restoration`에 설치하고, 이전 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration` 사본은 검색 경로에서 제거한다. 새 위치에서 `.mcp-venv`를 만들고 등록기를 실행해 MCP 경로를 갱신한 뒤 앱을 재시작·재연결한다. 기존 `.mcp-venv`는 백업에 보존하되, 새 경로에서 재사용하지 않는다.
+- **`%USERPROFILE%\.agents\skills` 검색 여부를 확인할 수 없는 경우:** 새 위치를 추가하지 않는다. 실제로 검색되는 기존 스킬 폴더와 MCP 설정을 백업한 뒤 그 위치의 스킬 폴더를 v2.7.9 전체 폴더로 교체한다. 기존 `.mcp-venv`와 다른 MCP 항목은 유지하고 등록기를 실행해 `hwp-restoration` 경로만 갱신한다.
+
+두 경우 모두 검색 가능한 경로에는 활성 스킬 폴더를 하나만 둔다. MCP 재연결만으로 스킬 선택 위치가 바뀌지는 않으므로 앱이 새 `SKILL.md` 경로를 읽는지 확인한다. 설치 중 시험지를 열거나 `hwp_prepare`를 실행하지 않는다. 다음 복원의 첫 응답에서 `runtime_version=2.7.9`를 확인하고, 사용자 작업 폴더와 결과물은 이동·삭제하지 않는다. 백업과 다른 MCP 항목은 그대로 보존한다.
+
 ## OpenCode 연결
 
 OpenCode의 전역 설정은 Windows에서 `%USERPROFILE%\.config\opencode\opencode.json`이다. OpenCode는 Antigravity와 설정 형식이 다르므로 `install_mcp_server.py`를 OpenCode 설정에 사용하지 않는다.

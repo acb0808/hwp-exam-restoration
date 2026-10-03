@@ -2,7 +2,7 @@
 
 ## 1. 설치하기
 
-[README의 설치 요청문](../README.md)을 복사해 PC의 파일과 프로그램을 사용할 수 있는 AI 에이전트에게 보냅니다. 사용 중인 앱에 맞는 MCP 연결 절차는 [AGENT_INSTALL.md](../AGENT_INSTALL.md)에 있습니다. 설치 뒤 MCP를 다시 연결하라는 안내가 나오면 그 앱에서 `hwp-restoration` 연결을 새로고침합니다.
+[처음 설치하는 경우 README의 설치 요청문](../README.md)을 복사해 PC의 파일과 프로그램을 사용할 수 있는 AI 에이전트에게 보냅니다. v2.7.3 사용자라면 README의 **기존 사용자 업데이트 요청문**을 사용해 스킬 경로 중복을 정리합니다. 사용 중인 앱에 맞는 절차는 [AGENT_INSTALL.md](../AGENT_INSTALL.md)에 있습니다.
 
 ## 2. PDF와 저장 위치 알려주기
 
