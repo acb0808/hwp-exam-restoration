@@ -14,7 +14,7 @@ class GridTests(unittest.TestCase):
                 'regions':[{'id':'L','bbox_mm':[10,20,90,270]},{'id':'R','bbox_mm':[110,20,90,270]}],'questions':qs}
     def build(self,page,d):
         p=Path(d)/'grid.hwpx'
-        receipt=build_hwpx([page],p,template_dir=ROOT/'assets/templates/pdf2hwp-grid',title='시험',template_fields={'school':'명문고등학교','year':'2025','exam_title':'고1-2 중간고사'})
+        receipt=build_hwpx([page],p,template_dir=ROOT/'assets/templates/pdf2hwp-grid',title='시험',template_fields={'school':'예시고등학교','year':'2025','exam_title':'고1-2 중간고사'})
         with zipfile.ZipFile(p) as z:root=E.fromstring(z.read('Contents/section0.xml'))
         return receipt,root
     def test_three_left_two_right_are_merged_cells_of_one_source_table(self):
@@ -41,7 +41,7 @@ class GridTests(unittest.TestCase):
         pages=[self.page(1,1),self.page(1,1)];pages[1]['page_number']=2
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'grid.hwpx'
-            build_hwpx(pages,p,template_dir=ROOT/'assets/templates/pdf2hwp-grid',title='시험',template_fields={'school':'명문고등학교','year':'2025','exam_title':'고1-2 중간고사'})
+            build_hwpx(pages,p,template_dir=ROOT/'assets/templates/pdf2hwp-grid',title='시험',template_fields={'school':'예시고등학교','year':'2025','exam_title':'고1-2 중간고사'})
             with zipfile.ZipFile(p) as z:root=E.fromstring(z.read('Contents/section0.xml'));head=E.fromstring(z.read('Contents/header.xml'))
             hh='{http://www.hancom.co.kr/hwpml/2011/head}'
             fills={n.get('id'):n for n in head.iter(hh+'borderFill')}

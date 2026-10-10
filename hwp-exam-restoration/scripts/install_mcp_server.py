@@ -7,6 +7,10 @@ from pathlib import Path
 import tempfile
 
 NAME='hwp-restoration'
+# Seconds one hwp_build / hwp_render_figures call may wait for its result. The engine's own default (30) is for
+# opencode, which drops the server after 60 s. This file registers the server for Antigravity, where a call may wait
+# for minutes: an export of 30 to 45 s then ends inside the build call, without a second hwp_status call.
+ANTIGRAVITY_WAIT_SECONDS='120'
 def sha(data): return hashlib.sha256(data).hexdigest()
 def atomic(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -44,7 +48,7 @@ def main():
     value=json.loads(current.decode('utf-8-sig')) if current else {}
     servers=value.setdefault('mcpServers',{})
     if not isinstance(servers,dict): raise ValueError('mcpServers_object_required')
-    entry={'command':str(python),'args':['-B','-X','utf8',str(script)],'cwd':str(script.parent),'env':{'PYTHONUTF8':'1'}}
+    entry={'command':str(python),'args':['-B','-X','utf8',str(script)],'cwd':str(script.parent),'env':{'PYTHONUTF8':'1','HWP_MCP_WAIT_SECONDS':ANTIGRAVITY_WAIT_SECONDS}}
     if a.engine: entry['env']['HWP_TIKZ_ENGINE']=str(a.engine.resolve(strict=True))
     others={k:v for k,v in servers.items() if k!=NAME}
     servers[NAME]=entry

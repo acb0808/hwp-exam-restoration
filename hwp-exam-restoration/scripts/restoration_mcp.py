@@ -15,6 +15,13 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, ImageContent, TextContent, ToolAnnotations
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
+try:
+    # Loaded here, at start-up (0.5 s), for restoration_figure_locate. Its first import from a render thread of
+    # this server, with three pages compiling, took 79 s and made each first render run past its wait.
+    import numpy  # noqa: F401
+except ImportError:
+    pass  # optional: figures are then compared in the producer's own source box
+
 
 def dispatch(action: str, params: dict) -> dict:
     # Delay workflow imports until execution, keeping tools/list fast and usable
@@ -107,9 +114,10 @@ class FigureReview(BaseModel):
 class PageReview(BaseModel):
     """One page decision made by the job's independent final reviewer."""
     model_config = ConfigDict(extra='forbid')
-    page: Page = Field(description='Page ID from review_tasks, including the final answer sheet ID.')
+    page: Page = Field(description='Page number from the report at report_path, including the final answer sheet page.')
+    record: str | None = Field(default=None, description='hwp_submit_review only: one line with the counted choice rows per question and, per figure, what the source and the output show.')
     status: Literal['passed', 'passed_with_notes', 'failed'] = Field(description='Reviewer verdict after comparing the entire source and final page; the engine recomputes it from issue tags.')
-    issues: list[str] = Field(description='Tag each difference: 누락/오독/선지/잘림/정답 only when math facts, conditions, requested result, choice scope, or answer are affected; 도형/경미 for notes. Harmless OCR wording differences are 경미, not repairs. Untagged issues count as repairs.')
+    issues: list[str] = Field(description='Each observed difference starts with one tag: 누락/오독/선지/잘림/정답 (repair) or 도형/경미 (note only). Untagged issues count as repairs. Empty only if none remain.')
 
 
 def _failure(message: str, next_action: str) -> CallToolResult:
@@ -199,9 +207,11 @@ async def _call(action: str, **params) -> CallToolResult:
 
 @mcp.tool(annotations=_annotations('Select question pages'))
 async def hwp_prepare(source: Nonempty, job: Nonempty, dpi: Annotated[int, Field(ge=72, le=600)] | None = None,
-                      question_pages: list[Page] | None = None, include_answers: bool = True) -> CallToolResult:
-    """Prepare once. Without question_pages return an overview; repeat with selected question source page numbers without rerendering. Exclude source cover, blank and answer pages. include_answers defaults true: each owner supplies answer blocks and the engine appends one final answer table. Returns one worker handoff per selected page."""
-    return await _call('prepare', source=source, job=job, dpi=dpi, include_answers=include_answers, **({'question_pages':question_pages} if question_pages is not None else {}))
+                      question_pages: list[Page] | None = None, include_answers: bool = True,
+                      include_figures: bool = True) -> CallToolResult:
+    """Prepare once. Without question_pages return an overview; repeat with selected question source page numbers without rerendering. Exclude source cover, blank and answer pages. include_answers defaults true: each owner supplies answer blocks and the engine appends the final answer table. include_figures defaults true: figures are restored; pass false only when the user asked for text without figures, then producers transcribe text and equations only. Returns one worker handoff per selected page."""
+    return await _call('prepare', source=source, job=job, dpi=dpi, include_answers=include_answers, include_figures=include_figures,
+                       **({'question_pages':question_pages} if question_pages is not None else {}))
 
 
 @mcp.tool(annotations=_annotations('Assign page restoration worker'))
@@ -265,12 +275,23 @@ async def hwp_build(job: Nonempty, output: Nonempty, title: str, school: str, ye
     return await _call('build', job=job, output=output, title=title, school=school, year=year, exam_title=exam_title, native=True)
 
 
+@mcp.tool(annotations=_annotations('Submit final review verdicts'))
+async def hwp_submit_review(job: Nonempty, reviews: list[PageReview]) -> CallToolResult:
+    """Called by the final reviewer itself, once per round, after comparing every page listed in the report at report_path: one entry per listed page with status, tagged issues (누락/오독/선지/잘림/정답 repair, 도형/경미 note; [] when passed) and record (counted choice rows and figure comparison in one line). Format problems are returned at once: correct them and call again without reopening images. The engine writes the report file. Then tell the main agent only that the review is submitted."""
+    return await _call('submit_review', job=job, reviews=reviews)
+
+
 @mcp.tool(annotations=_annotations('Record independent final review'))
-async def hwp_finish_review(job: Nonempty, reviewer_id: Nonempty, reviews: list[PageReview],
+async def hwp_finish_review(job: Nonempty, reviewer_id: Nonempty, reviews: list[PageReview] | None = None,
                             review_evidence: Nonempty | None = None,
                             review_evidence_path: Nonempty | None = None,
                             spawn_evidence: Evidence | None = None) -> CallToolResult:
-    """Record passed AND failed pages before repairs. Prefer review_evidence_path: the reviewer's UTF-8 report at the returned report_path, listing every reviewed source/reference/output/figure_sheet path. First round: spawn_evidence is the unmodified reviewer spawn/task response showing reviewer_id (then the report needs no ID line). Supply exactly one evidence text/path. No master rewriting. Use repair tags 누락/오독/선지/잘림/정답 only for discrepancies affecting math facts, conditions, requested result, choice scope, or answer; wording-only OCR differences without those effects use 경미. Diagram differences use 도형. A page's second failed verdict becomes unresolved notes. notes_build_required: call hwp_build once more to add the 검수 노트 page."""
+    """Main agent: confirm each review round before repairs. Normal form after the reviewer called hwp_submit_review: only job, reviewer_id (the host's actual ID) and, in the first round, spawn_evidence (the unmodified reviewer spawn/task response showing that ID); the submitted verdicts are used as they are. Fallback when the reviewer could not submit: pass reviews (passed AND failed pages) with review_evidence_path, the reviewer's report at report_path. A page's second failed verdict becomes unresolved notes. When all pages passed with notes, the build that adds the 검수 노트 page starts by itself: complete ends the job, building means call hwp_status; only notes_build_required asks for hwp_build once more."""
+    if reviews is None:
+        if review_evidence is not None or review_evidence_path is not None:
+            return _failure('reviews_required_with_review_evidence','Omit the evidence to use the verdicts the reviewer submitted with hwp_submit_review, or pass reviews with review_evidence_path.')
+        extra={'spawn_evidence':spawn_evidence} if spawn_evidence is not None else {}
+        return await _call('finish_review', job=job, reviewer_id=reviewer_id, **extra)
     if (review_evidence is None)==(review_evidence_path is None):
         return _failure('exactly_one_review_evidence_text_or_path_required','Use the existing reviewer report path only; do not regenerate the report.')
     if review_evidence_path is not None:

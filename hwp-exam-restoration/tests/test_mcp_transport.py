@@ -22,11 +22,17 @@ class MCPTransportTests(unittest.TestCase):
     def run_async(self, value):
         return asyncio.run(value)
 
+    @unittest.skipUnless(importlib.util.find_spec('numpy'), 'numpy is optional')
+    def test_numpy_is_loaded_when_the_server_starts(self):
+        source = Path(self.transport.__file__).read_text(encoding='utf-8')
+        self.assertLess(source.index('import numpy'), source.index('def dispatch'))   # not first inside a render thread: 79 s there
+        self.assertIn('numpy', sys.modules)
+
     def test_tool_inventory_has_typed_markdown_input_and_local_annotations(self):
         tools = {t.name: t for t in self.run_async(self.transport.mcp.list_tools())}
         self.assertEqual(set(tools), {'hwp_prepare', 'hwp_assign', 'hwp_submit_reading',
             'hwp_status', 'hwp_inspect', 'hwp_render_figures',
-            'hwp_review_figures', 'hwp_build', 'hwp_finish_review', 'hwp_help'})
+            'hwp_review_figures', 'hwp_build', 'hwp_submit_review', 'hwp_finish_review', 'hwp_help'})
         schema = tools['hwp_submit_reading'].inputSchema
         self.assertIn({'minLength': 1, 'type': 'string'}, schema['properties']['markdown']['anyOf'])
         self.assertIn({'minLength': 1, 'type': 'string'}, schema['properties']['markdown_path']['anyOf'])
@@ -34,6 +40,7 @@ class MCPTransportTests(unittest.TestCase):
         self.assertNotIn('native', tools['hwp_build'].inputSchema['properties'])
         self.assertIn('question_pages', tools['hwp_prepare'].inputSchema['properties'])
         self.assertTrue(tools['hwp_prepare'].inputSchema['properties']['include_answers']['default'])
+        self.assertTrue(tools['hwp_prepare'].inputSchema['properties']['include_figures']['default'])
         self.assertIn('worker_id', tools['hwp_assign'].inputSchema['properties'])
         self.assertNotIn('worker_a', tools['hwp_assign'].inputSchema['properties'])
         self.assertIn('reviews', tools['hwp_finish_review'].inputSchema['properties'])
@@ -133,6 +140,13 @@ class MCPTransportTests(unittest.TestCase):
                 self.run_async(self.transport.hwp_prepare('source.pdf','job',**kwargs))
             self.assertEqual(dispatch.call_args.args[1]['include_answers'],include)
 
+    def test_figures_default_and_text_only_request_reach_service(self):
+        for include in (True,False):
+            with patch.object(self.transport,'dispatch',return_value={'status':'prepared'}) as dispatch:
+                kwargs={} if include else {'include_figures':False}
+                self.run_async(self.transport.hwp_prepare('source.pdf','job',**kwargs))
+            self.assertEqual(dispatch.call_args.args[1]['include_figures'],include)
+
     def test_images_are_native_mcp_blocks_and_not_base64_json(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'view.png'
@@ -189,7 +203,7 @@ class MCPTransportTests(unittest.TestCase):
                         initialized = await session.initialize()
                         self.assertEqual(initialized.serverInfo.name, 'hwp_restoration_mcp')
                         listed = await session.list_tools()
-                        self.assertEqual(len(listed.tools), 10)
+                        self.assertEqual(len(listed.tools), 11)
                         result = await session.call_tool('hwp_status', {'job': 'unused', 'shell': 'not allowed'})
                         self.assertTrue(result.isError)
                         self.assertEqual(result.structuredContent['status'], 'failed')

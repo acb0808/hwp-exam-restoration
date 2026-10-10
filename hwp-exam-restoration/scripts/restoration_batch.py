@@ -254,6 +254,7 @@ def review_pack(job, native, output, *, dpi=200):
         out = new_folder(output); packets = []
         for number, rendered in enumerate(doc,1):
             if pages[number-1].get('role')=='review_notes': continue  # mechanical notes for the human checker
+            if pages[number-1].get('role')=='answer_sheet_more': continue  # shown with the answer sheet it continues
             png = out/f'page-{number:04d}.png'
             rendered.get_pixmap(dpi=dpi,alpha=False).save(png)
             from restoration_job import compact_page_image
@@ -266,6 +267,13 @@ def review_pack(job, native, output, *, dpi=200):
                         'worker_id':'mechanical-answer-sheet','answer_reference':reference['path'],
                         'output_pdf':pdf,'output_image':{'path':str(png),'sha256':digest(png)},
                         'pages_sha256':native['pages_sha256'],'visual_status':'not_verified'}
+                more=[]  # further pages of a long answer table belong to this one review
+                for later in range(number+1,len(pages)+1):
+                    if pages[later-1].get('role')!='answer_sheet_more': continue
+                    extra=out/f'page-{later:04d}.png'
+                    doc[later-1].get_pixmap(dpi=dpi,alpha=False).save(extra);compact_page_image(extra)
+                    more.append({'path':str(extra),'sha256':digest(extra)})
+                if more: packet['more_output_images']=more
                 packet['instructions']='마지막 정답표의 번호·객관식 선택지·서답형 소문항·수식·잘림을 검수하세요. answer_reference의 문항과 후보 근거를 읽고 독립 계산으로 정답을 확인하세요. 이미 본 원본은 재사용합니다. 미확정·오답·누락은 failed로 보고하고 해당 담당자의 answer 블록만 수정합니다.'
                 path=out/f'page-{number:04d}.json';save_json(path,packet)
                 packets.append({'page':source_number,'output_page':number,'worker_id':'mechanical-answer-sheet','review_input':str(path)})

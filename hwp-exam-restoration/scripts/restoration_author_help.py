@@ -9,8 +9,25 @@ MATH_EXAMPLES = [
     {'use': '빈집합의 다른 표기', 'latex': r'A\ne\varnothing'},
     {'use': '생략점', 'latex': r'a_1+\cdots+a_n'},
     {'use': '선분', 'latex': r'\overline{AB}'},
+    {'use': '호', 'latex': r'\overparen{AB}'},
+    {'use': '각과 각도', 'latex': r'\angle ABC=30^\circ'},
+    {'use': '단위', 'latex': r'4 \mathrm{cm}'},
+    {'use': '평행·수직', 'latex': r'\overline{AB} \parallel \overline{CD},\overline{AB} \perp \overline{CD}'},
     {'use': '분수와 아래첨자', 'latex': r'A_k(a)=\frac{a+1}{2}'},
 ]
+
+# Commands producers reach for that have one exact supported spelling: the error names it, so the fix is one edit.
+REPLACEMENTS = {
+    r'\implies': r'\implies 대신 \Rightarrow를 쓰세요.',
+    r'\iff': r'\iff 대신 \Leftrightarrow를 쓰세요.',
+    r'\dots': r'\dots 대신 \cdots(가운데 점) 또는 \ldots(아래 점)를 쓰세요.',
+    r'\dotsc': r'\dotsc 대신 \ldots를 쓰세요.',
+    r'\dotsb': r'\dotsb 대신 \cdots를 쓰세요.',
+    r'\lt': r'\lt 대신 <를 쓰세요.',
+    r'\gt': r'\gt 대신 >를 쓰세요.',
+    r'\frown': r'호는 $\overparen{AB}$로 쓰세요.',
+    r'\!': r'\! 는 지우세요. 평행은 \parallel입니다.',
+}
 
 
 def answer_mode(enabled):
@@ -18,17 +35,32 @@ def answer_mode(enabled):
             if enabled else 'include_answers=false: 정답 계산·answer 블록·정답표를 작성하지 않습니다.')
 
 
+def figure_mode(enabled):
+    """The task line of a text-only job; nothing for the default, which restores figures."""
+    return ('' if enabled else
+            'include_figures=false: 이 작업은 글과 수식만 옮깁니다. 원본의 그림·그래프·도형은 복원하지 않습니다. '
+            '도형 자리 표시(`![](figure:…)`)와 TeX 파일을 쓰지 않고 hwp_render_figures·hwp_review_figures를 호출하지 않습니다. '
+            '그림 안에만 인쇄된 글자·수치는 옮기지 않고, 선지가 그림인 문항은 발문만 적습니다. '
+            '제출이 accepted를 돌려주면 이 쪽은 끝입니다.\n\n')
+
+
 def submit_call(root, page):
     return {'tool': 'hwp_submit_reading', 'arguments': {'job': str(root), 'page': page,
             'markdown_path': str(root / 'workers' / f'page-{page:04d}' / 'reading.md')}}
 
 
-def tool_examples(root, page):
+def tool_examples(root, page, figures=True):
     """Exact call shapes so producers need not open MCP schema files."""
-    return ('## 도구 호출 형식 (스키마 파일을 열지 않아도 됩니다)\n\n'
+    inspect = ('## 도구 호출 형식 (스키마 파일을 열지 않아도 됩니다)\n\n'
             '- 확대: `hwp_inspect` ' + json.dumps({'job': str(root), 'page': page, 'requests': [
                 {'question_id': 'q1', 'id': 'q1-sign', 'bbox_px': ['x', 'y', '폭', '높이'], 'reason': '불명확한 이유'}]}, ensure_ascii=False)
-            + ' (필요한 곳을 한 번에 모아 요청; 여러 개면 라벨 붙은 한 장으로 반환)\n'
+            + ' (필요한 곳을 한 번에 모아 요청; 여러 개면 라벨 붙은 한 장으로 반환)\n')
+    closing = ('- 도구 목록에 `hwp_...` 이름이 직접 보이지 않고 `call_mcp_tool`만 있으면 ServerName `hwp-restoration`, ToolName은 위 도구 이름, '
+            'Arguments는 위 JSON으로 호출합니다(`hwp_submit_reading`·`hwp_help`도 같습니다).\n'
+            '- 이 도구 설명·SKILL.md·역할 파일은 다시 열지 않습니다. 필요한 파일은 한 턴에 함께 엽니다.\n\n')
+    if not figures:
+        return inspect + closing
+    return (inspect +
             '- 도형 렌더: 도형마다 `' + str(root / 'workers' / f'page-{page:04d}' / 'ID.tex') + '` 파일을 쓰고(ID는 reading.md의 figure ID) '
             '첫 줄에 `% width_mm=50 source_bbox_px=x,y,폭,높이`(원본 픽셀 영역)를 적은 뒤 `hwp_render_figures` '
             + json.dumps({'job': str(root), 'page': page}, ensure_ascii=False)
@@ -38,11 +70,11 @@ def tool_examples(root, page):
             '- 도형 검수: `hwp_review_figures` ' + json.dumps({'job': str(root), 'page': page, 'batch_path': '반환된 값', 'reviews': [
                 {'id': 'q1-figure-1', 'status': 'passed', 'issues': [],
                  'checks': {'geometry': 'passed', 'labels': 'passed', 'marks': 'passed', 'source_comparison': 'passed'}}]}, ensure_ascii=False) + '\n'
-            '- 이 도구 설명·SKILL.md·역할 파일은 다시 열지 않습니다. 필요한 파일은 한 턴에 함께 엽니다.\n\n')
+            + closing)
 
 
-def task_contract(root, page, enabled):
-    return ('## 이 작업에서 할 일\n\n' + answer_mode(enabled) + '\n\n'
+def task_contract(root, page, enabled, figures=True):
+    return ('## 이 작업에서 할 일\n\n' + answer_mode(enabled) + '\n\n' + figure_mode(figures) +
             '아래 Markdown을 작성한 뒤 바로 제출하세요. 지원 여부를 확인하려고 설치/설정/내부 Python 파일을 읽지 않습니다.\n'
             '제출 호출: `' + json.dumps(submit_call(root, page), ensure_ascii=False) + '`\n'
             '먼저 이 쪽 전체를 작성해 제출하세요. 제출이 형식·모든 수식을 한 번에 검사합니다. '
@@ -55,7 +87,13 @@ def equation_guidance(latex, error):
     details = equation_failure_details(latex, error)
     codes = {d.get('code') for d in details.get('engine_diagnostics', [])}
     tokens = {d.get('token') for d in details.get('engine_diagnostics', [])}
-    if r'\mid' in tokens:
+    replacement = next((REPLACEMENTS[t] for t in tokens if t in REPLACEMENTS), None)
+    if 'ambiguous_hat' in codes:
+        hint = (r'\widehat{AB}는 모자(^) 기호로 인쇄됩니다. 원본이 호이면 $\overparen{AB}$, 각이면 $\angle ABC$로 쓰세요. '
+                r'원본이 정말 모자 기호이면 $\hat{AB}$로 쓰세요.')
+    elif replacement:
+        hint = replacement
+    elif r'\mid' in tokens:
         hint = r'집합 조건 구분선인 경우에만 \mid 대신 |를 쓰세요. 예: $A=\{x | x>0\}$. 나눗셈 관계 등 다른 의미라면 바꾸지 말고 해당 문항을 보고하세요.'
     elif 'spacing_approximation' in codes:
         hint = ('표시한 간격 명령은 HWP에서 근사되어 엄격 검증이 거부했습니다. 자동 삭제하거나 ~로 바꾸지 마세요. '
@@ -107,8 +145,13 @@ def author_help(root, page, topic='writing'):
     elif topic == 'equations':
         result.update(examples=MATH_EXAMPLES,
             rules=[r'\text{한글}, \cdots, \emptyset, \varnothing을 지원합니다. 설명은 \text{}, 수학 명령은 그 밖에 둡니다.',
+                   r'호는 \overparen{AB}, 각은 \angle ABC, 각도는 30^\circ, 평행은 \parallel입니다. \widehat{AB}는 모자 기호라서 호·각에 쓰지 않습니다.',
                    r'\mid는 지원하지 않습니다. 집합 조건 막대는 |를 사용합니다.',
                    r'\quad 등 근사 간격 명령을 임의 삭제·치환하지 않습니다. 본문 공백과 수식 내부 간격을 구분하세요.'])
+    elif not manifest.get('include_figures', True):
+        result.update(include_figures=False, rules=[
+            '이 작업은 글과 수식만 옮깁니다(include_figures=false). 도형 자리 표시와 TeX를 쓰지 않고 도형 도구를 호출하지 않습니다.',
+            'reading.md를 제출해 accepted가 오면 이 쪽은 끝입니다.'])
     else:
         result.update(rules=[
             'reading.md의 ![](figure:ID)와 같은 ID.tex를 배정 폴더에 저장합니다.',

@@ -1,8 +1,12 @@
 """HWP serialization. Every atom boundary is explicit; fractions are grouped."""
 from __future__ import annotations
 
+import re
+
 from .model import Node
-from .symbols import MATH_ALPHABETS
+from .symbols import GREEK, MATH_ALPHABETS
+
+_TAIL_WORD = re.compile(r'(?:^|[^A-Za-z])([A-Za-z]{2,})$')
 
 # Readability spacing follows Korean exam typesetting (2,260 scripts from published
 # KICE/office exam HWP files): a quarter space (`) before a prime and before the dx of
@@ -35,6 +39,13 @@ def _function_name(n: Node) -> bool:
 def _is_integral(n: Node) -> bool:
     n = n.children[0] if n.kind == 'scripts' else n
     return n.kind == 'atom' and n.value in INTEGRALS
+
+
+def _keyword_tail(text: str) -> bool:
+    """The script so far ends in a Hancom keyword (TIMES, DIV, LEQ, DEG ...). Hancom prints a function name
+    right after such a keyword in italics (2 TIMES sin x); a quarter space before the name keeps it upright."""
+    word = _TAIL_WORD.search(text)
+    return bool(word) and word.group(1) not in SPACED_FUNCTIONS and word.group(1).lower().removeprefix('var') not in GREEK
 
 
 def _space(n: Node | None) -> bool:
@@ -88,6 +99,8 @@ def render(node: Node, matrix_padding: int = 2, _style: str = 'it', _script: boo
             flush_number()
             text = r(child)
             previous = items[index - 1] if index else None
+            if _function_name(child) and parts and _keyword_tail(parts[-1]):
+                text = QUARTER + text
             if not _script and following is not None and not _space(following):
                 if child.kind == 'literal' and child.value == ',':
                     text += QUARTER * 2
@@ -124,6 +137,9 @@ def render(node: Node, matrix_padding: int = 2, _style: str = 'it', _script: boo
             # A superscripted prime renders as a tiny raised tick in Hancom; the inline
             # glyph after a quarter space is what printed exams use (f`prime).
             return text + QUARTER + ' '.join(['prime'] * primes)
+        if sup.kind != 'empty' and _unwrap(sup).kind == 'atom' and _unwrap(sup).value == 'CIRC':
+            # 30^\circ is a degree: Hancom's DEG sits at the digits' height, a superscripted CIRC is a small detached ring.
+            return text + ' DEG'
         return text + ('^' + rs(sup) if sup.kind != 'empty' else '')
     if kind == 'accent':
         return value + ' ' + br(children[0])

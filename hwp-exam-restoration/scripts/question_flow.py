@@ -87,6 +87,13 @@ class QuestionFlow:
         position=(f'<hp:sz width="{mm(w)}" height="{mm(h)}" widthRelTo="ABSOLUTE" heightRelTo="ABSOLUTE" protect="1"/>'
             f'<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="1" holdAnchorAndSO="1" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="{mm(y)}" horzOffset="{mm(x)}"/><hp:outMargin left="0" right="0" top="0" bottom="0"/>')
         return re.sub(r'<hp:sz\b[^>]*/>.*?<hp:outMargin\b[^>]*/>',lambda _:position,raw,flags=re.S).replace('textWrap="TOP_AND_BOTTOM"','textWrap="IN_FRONT_OF_TEXT"')
+    def inline_picture(self,image):
+        """A picture set in the line like a character (검수 노트 rows), so its table cell grows with it."""
+        p=Path(image['path']);assert hashlib.sha256(p.read_bytes()).hexdigest()==image['sha256'],'note_image_changed'
+        w,h=image['size_mm']
+        self.b.add_picture(p,width_hwpunit=mm(w),height_hwpunit=mm(h));raw=self.b.elements.pop()
+        raw=raw[raw.index('<hp:pic'):raw.index('</hp:pic>')+len('</hp:pic>')]
+        return re.sub(r'<hp:sz\b[^>]*/>.*?<hp:outMargin\b[^>]*/>',lambda _:self.inline_position(w,h),raw,flags=re.S)
     def contents(self,blocks,q,width):
         out=[]
         for block in blocks:

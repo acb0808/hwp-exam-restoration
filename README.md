@@ -2,7 +2,7 @@
 
 스캔한 한국어 수학 시험지 PDF를 편집 가능한 한글 시험지로 만드는 AI 에이전트용 스킬입니다. 문제 쪽의 본문과 수식을 옮기고 필요한 도형을 다시 그려 시험지 양식에 배치한 뒤, 마지막에 정답표를 붙입니다.
 
-공개 버전은 **v2.7.9**입니다. 설치 파일과 한국어 안내는 [GitHub 릴리스](https://github.com/acb0808/hwp-exam-restoration/releases/tag/v2.7.9)에서 받을 수 있습니다.
+공개 버전은 **v2.8.0**입니다. 설치 파일과 한국어 안내는 [GitHub 릴리스](https://github.com/acb0808/hwp-exam-restoration/releases/tag/v2.8.0)에서 받을 수 있습니다.
 
 ## 이 스킬이 하는 일
 
@@ -12,6 +12,7 @@
 - 도형, 그래프, 표 모양의 그림, 그림 선택지를 다시 만들고 알맞은 크기로 배치합니다. 그림 원본과 TikZ 소스는 작업 폴더에 남습니다.
 - 문제 쪽마다 제작자를 배정하고, 제작에 참여하지 않은 검수자가 전체 문제와 정답표를 대조합니다.
 - 수정이 필요한 내용은 고치고, 도형이나 간격처럼 사람이 결정할 차이는 정답표 앞의 검수 노트에 남길 수 있습니다.
+- 그림이 필요 없으면 “그림은 필요 없고 텍스트만”이라고 요청해 글과 수식만 복원할 수 있습니다. 문항이 많은 교재는 정답표를 여러 쪽으로 나눕니다.
 - 한글 문서 **HWP/HWPX**와 화면 확인용 **PDF**를 만듭니다.
 
 도형은 한글 문서 안에서 선과 점을 각각 잡아 편집하는 개체가 아니라 그림으로 삽입됩니다. 그림을 바꾸고 싶다면 작업 폴더의 TikZ 소스를 이용할 수 있습니다.
@@ -25,7 +26,7 @@
 처음 설치하는 경우 PC의 파일과 프로그램을 사용할 수 있는 AI 에이전트에게 다음 요청을 보내세요.
 
 ```text
-https://github.com/acb0808/hwp-exam-restoration 의 v2.7.9를 설치해주세요.
+https://github.com/acb0808/hwp-exam-restoration 의 v2.8.0을 설치해주세요.
 저는 코딩을 모릅니다. 저장소의 AGENT_INSTALL.md를 먼저 읽고 제 앱에 맞는 절차를 따라주세요.
 기존 스킬 폴더와 MCP 설정을 백업하고 다른 도구 설정은 보존해주세요.
 Python 환경과 hwp-restoration MCP를 준비하고, 제 앱에서 연결되도록 설정해주세요.
@@ -33,20 +34,22 @@ Python 환경과 hwp-restoration MCP를 준비하고, 제 앱에서 연결되도
 설정에 비밀 키가 있으면 출력하지 말고, 기존 설정 전체를 교체하지 마세요.
 ```
 
-### 기존 v2.7.3 사용자: 업데이트 요청문
+### 기존 사용자(v2.7.9 기준): 업데이트 요청문
 
-v2.7.3을 Antigravity에서 사용 중이라면 신규 설치 요청 대신 아래 문구를 보내세요. v2.7.3은 보통 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration`에 설치돼 있으므로, 에이전트가 실제로 사용하는 스킬 경로를 먼저 확인하게 합니다.
+이전 버전을 사용 중이라면 신규 설치 요청 대신 아래 문구를 보내세요. 이 요청문은 바로 앞 공개 버전인 v2.7.9를 기준으로 썼습니다. v2.7.9는 보통 `%USERPROFILE%\.agents\skills\hwp-exam-restoration`에 설치돼 있습니다. 더 오래된 v2.7.3(보통 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration`)에서도 같은 문구를 쓸 수 있습니다. 에이전트가 설치된 버전과 실제 스킬 경로를 먼저 확인하고, 업데이트로 무엇이 달라지는지 변경 내용 문서를 읽어 알려 줍니다.
 
 ```text
-설치된 hwp-exam-restoration 스킬을 https://github.com/acb0808/hwp-exam-restoration 의 v2.7.9로 업데이트해주세요.
-저는 코딩을 모릅니다. 저장소의 AGENT_INSTALL.md에서 “v2.7.3에서 업데이트할 때”를 먼저 읽고 그대로 진행해주세요.
+설치된 hwp-exam-restoration 스킬을 https://github.com/acb0808/hwp-exam-restoration 의 v2.8.0으로 업데이트해주세요.
+저는 코딩을 모릅니다. 저장소의 AGENT_INSTALL.md에서 “이전 버전에서 업데이트할 때”를 먼저 읽고 그대로 진행해주세요.
+먼저 지금 설치된 버전을 스킬 폴더의 BUNDLE-MANIFEST.json에서 확인해주세요. 이미 v2.8.0이면 아무것도 바꾸지 말고 그렇게 알려주세요.
+저장소의 docs/CHANGELOG-v2.8.0.md를 읽고, 제 버전에서 무엇이 달라지는지 쉬운 말로 알려주세요: 새로 할 수 있는 일, 고쳐진 문제, 비용과 시간의 변화, 사용할 때 달라지는 점, 알려진 한계. 설치된 버전이 v2.7.9보다 오래됐으면 docs/CHANGELOG-v2.7.9.md도 함께 읽어주세요. 문서에 없는 내용은 덧붙이지 마세요.
 현재 사용 중인 SKILL.md와 Antigravity가 검색하는 스킬 경로를 확인하고, 바꾸기 전에 스킬 폴더와 MCP 설정을 날짜가 있는 백업 위치에 보관해주세요.
-Antigravity가 %USERPROFILE%\.agents\skills를 검색하는 것이 확인되면 새 버전을 그곳에 설치하고 MCP를 새 경로로 다시 연결해주세요. 이전 %USERPROFILE%\.gemini\config\skills\hwp-exam-restoration 사본은 백업한 뒤 검색 경로에서 제거해 활성 사본을 하나만 남겨주세요.
-%USERPROFILE%\.agents\skills 검색이 확인되지 않으면 실제로 검색되는 기존 위치를 백업한 뒤 그 자리에서 v2.7.9로 교체해주세요. 검색 가능한 두 위치에 버전을 중복 설치하지 마세요.
-기존 .mcp-venv와 제 작업 폴더·결과물, 다른 스킬과 MCP 설정은 보존해주세요. 새 위치로 옮겨 새 .mcp-venv가 필요하면 기존 환경을 복사하지 말고 새로 만들어주세요.
+스킬이 이미 %USERPROFILE%\.agents\skills\hwp-exam-restoration에 있으면(v2.7.9의 기본 위치) 같은 자리에서 .mcp-venv는 남기고 나머지를 v2.8.0 전체 폴더로 교체해주세요.
+스킬이 %USERPROFILE%\.gemini\config\skills\hwp-exam-restoration에 있으면(v2.7.3의 기본 위치) 다음 두 경우로 나눠주세요. Antigravity가 %USERPROFILE%\.agents\skills를 검색하는 것이 확인되면 새 버전을 그곳에 설치하고 MCP를 새 경로로 다시 연결한 뒤, 이전 사본은 백업하고 검색 경로에서 제거해 활성 사본을 하나만 남겨주세요. 확인되지 않으면 실제로 검색되는 기존 위치에서 v2.8.0으로 교체해주세요. 검색 가능한 두 위치에 버전을 중복 설치하지 마세요.
+기존 .mcp-venv와 제 작업 폴더·결과물, 다른 스킬과 MCP 설정은 보존해주세요. 기존 .mcp-venv를 그대로 쓰는 경우 requirements-mcp.txt를 한 번 더 설치해주세요(numpy가 늘었습니다). 새 위치로 옮겨 새 .mcp-venv가 필요하면 기존 환경을 복사하지 말고 새로 만들어주세요.
 진행 중인 복원 작업이 있으면 버전을 섞지 않도록 업데이트 전에 알려주세요.
-새 SKILL.md 선택과 hwp-restoration MCP 연결을 확인하고, 다음 복원 작업의 첫 hwp_prepare 응답에서 runtime_version이 2.7.9인지 확인해주세요. 설치만 요청한 경우 시험지로 출력을 시작하지 마세요.
-제가 직접 해야 하는 재연결만 쉬운 말로 알려주고, 마지막에 이전 버전·새 버전·백업 위치·확인된 항목을 알려주세요. API 키나 비밀번호를 묻거나 유료 벤치마크를 실행하지 마세요.
+새 SKILL.md 선택과 hwp-restoration MCP 연결을 확인하고, 다음 복원 작업의 첫 hwp_prepare 응답에서 runtime_version이 2.8.0인지 확인해주세요. 설치만 요청한 경우 시험지로 출력을 시작하지 마세요.
+제가 직접 해야 하는 재연결만 쉬운 말로 알려주고, 마지막에 이전 버전·새 버전·백업 위치·확인된 항목과 위에서 읽은 달라지는 점을 알려주세요. API 키나 비밀번호를 묻거나 유료 벤치마크를 실행하지 마세요.
 ```
 
 [설치 안내](AGENT_INSTALL.md)에는 Antigravity와 OpenCode의 MCP 설정 방법이 있습니다. 이 스킬은 Windows, 데스크톱 한컴오피스 한글, Python 3.12가 필요합니다. 도형을 그릴 때는 TeX/TikZ도 필요합니다. 프로그램과 글꼴, AI 서비스 이용권은 포함되지 않습니다.
@@ -63,7 +66,9 @@ Antigravity가 %USERPROFILE%\.agents\skills를 검색하는 것이 확인되면 
 완성된 HWP, HWPX, PDF의 저장 위치와 남은 검수 노트를 알려주세요.
 ```
 
-[처음부터 사용하기](docs/QUICKSTART.md) · [문제가 생겼을 때](docs/TROUBLESHOOTING.md) · [v2.7.9 변경 내용](docs/CHANGELOG-v2.7.9.md)
+그림이 필요 없으면 둘째 줄을 “문제에 포함된 그림은 필요 없고, 텍스트만 작업해 주세요. 마지막 정답표를 만들어주세요.”로 바꿉니다. 그림을 읽어야 풀리는 문항의 정답은 결과를 받은 뒤 직접 한 번 확인하세요.
+
+[처음부터 사용하기](docs/QUICKSTART.md) · [문제가 생겼을 때](docs/TROUBLESHOOTING.md) · [v2.8.0 변경 내용](docs/CHANGELOG-v2.8.0.md)
 
 시험지와 결과물은 사용자 PC의 작업 폴더에 저장됩니다. AI 에이전트가 원본을 모델 서비스로 보낼 수 있으므로, 자료를 전달하기 전에 사용하는 서비스의 데이터 취급 조건을 확인하세요. 공개 저장소에는 개인 시험지나 복원 결과를 올리지 마세요.
 

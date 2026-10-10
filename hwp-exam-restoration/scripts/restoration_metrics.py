@@ -19,11 +19,11 @@ MAX_RECENT_EVENTS = 64
 MAX_JSON_BYTES = 4 * 1024 * 1024
 ACTIONS = frozenset(('prepare', 'assign', 'submit_reading', 'inspect',
     'render_figures', 'review_figures', 'compose', 'build', 'status',
-    'read_asset', 'finish_review', 'batch_assign', 'batch_submit_reading', 'unknown'))
+    'read_asset', 'finish_review', 'submit_review', 'batch_assign', 'batch_submit_reading', 'unknown'))
 STATUSES = frozenset(('prepared', 'needs_selection', 'already_assigned', 'assigned',
     'accepted', 'ready_for_figures', 'ready_to_inspect', 'pending_review', 'ready',
     'failed', 'blocked', 'partial_failure', 'batch_processed', 'complete', 'building', 'built',
-    'in_progress', 'needs_rebuild', 'unknown'))
+    'in_progress', 'needs_rebuild', 'review_recorded', 'unknown'))
 # Explicit allowlist: even identifier-shaped user prose must not enter metrics.
 ERROR_CODES = frozenset(('input', 'environment', 'missing_file',
     'input_error', 'environment_error', 'integrity_error',

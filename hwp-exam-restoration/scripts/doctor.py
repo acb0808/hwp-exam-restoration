@@ -19,7 +19,7 @@ def inspect():
             if not path.is_relative_to(RUNTIME) or content_digest(path)!=item['sha256']:
                 errors.append('bundled_runtime_hash_mismatch: '+item['path'])
     except (OSError,ValueError,ImportError,KeyError) as exc:errors.append(str(exc))
-    deps={name:available(name) for name in ('jsonschema','fitz','PIL','psutil','win32com','pythoncom')}
+    deps={name:available(name) for name in ('jsonschema','fitz','PIL','numpy','psutil','win32com','pythoncom')}  # numpy is optional (restoration_figure_locate)
     ready=not errors and all(deps[n] for n in ('jsonschema','fitz','PIL'))
     try:tikz=runpy.run_path(str(RUNTIME/'tikz_render.py'))['doctor']()
     except (OSError,ValueError,ImportError) as exc:tikz={'status':'blocked','error':str(exc)}

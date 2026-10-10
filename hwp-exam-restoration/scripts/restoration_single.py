@@ -14,10 +14,23 @@ _NATIVE_PROCESSES={}
 WAIT_SECONDS=30  # a build that ends at the limit still needs ~12 s to collect its review inputs (52 s seen at 40)
 _RENDERS={}  # (job, page) -> one render running beside the job lock, until its result is handed out
 _RENDERS_LOCK=__import__('threading').Lock()
-def wait_seconds():
-    try:return max(0.5,float(os.environ.get('HWP_MCP_WAIT_SECONDS',WAIT_SECONDS)))
-    except ValueError:return WAIT_SECONDS
-RUNTIME_VERSION='2.7.9'  # Loaded code version, never read from a replaced manifest.
+# A finished render is handed out at once, so its wait may go nearer the limit. Three pages rendering together took
+# 22 to 39 s a render; at 30 s that cost one to six extra render calls in a three-page run.
+RENDER_WAIT_SECONDS=45
+def wait_seconds(default=WAIT_SECONDS):
+    try:return max(0.5,float(os.environ.get('HWP_MCP_WAIT_SECONDS',default)))
+    except ValueError:return default
+def subagent_type(name):
+    """Antigravity subagent type for a role: the role's own type when the installed definition is this skill's file, else `self`.
+
+    The role's own type starts with about 6k tokens of fixed prompt (the role text included), `self` with about 25k,
+    read again by every call: 6.10 against 7.36 points of the 5-hour quota in a three-page run.
+    A definition from an older version has no MCP access and a missing one cannot be started, so both fall back to `self`."""
+    try:
+        if (Path.home()/'.gemini/config/agents'/f'{name}.md').read_bytes()==(shared.SKILL/'agents'/f'{name}.md').read_bytes():return name
+    except OSError:pass
+    return 'self'
+RUNTIME_VERSION='2.8.0'  # Loaded code version, never read from a replaced manifest.
 TIKZ_HELPERS=shared.SKILL/'assets/tikz/exam-marks.tex'
 
 
@@ -59,7 +72,7 @@ def diagram_document(text,width_mm=None,min_scale=FIT_FREE_SCALE,shifts=None):
     # Inline only when used: saved source hashes bind helper changes to the
     # existing render cache, without external input files or new model calls.
     helpers=(TIKZ_HELPERS.read_text(encoding='utf-8')+'\n'
-             if re.search(r'\\Exam(?:RightAngle|LengthArc|Label|Ticks|Implies)\b',clean) else '')
+             if re.search(r'\\Exam(?:RightAngle|LengthArc|Label|Ticks|Implies|Angle)\b',clean) else '')
     # Same rule for computed intersections, so figures without them keep their cached renders.
     libraries=('calc,arrows.meta,angles,quotes'+(',intersections' if re.search(r'name\s+(?:path|intersections)',clean) else '')
                +(',patterns' if re.search(r'\bpattern\s*=',clean) else ''))  # hatched shading in exam figures
@@ -76,6 +89,88 @@ def diagram_document(text,width_mm=None,min_scale=FIT_FREE_SCALE,shifts=None):
             +helpers+preamble(text,shifts)+'\\begin{document}%\n'+fitted_body(text,width_mm,min_scale)+'\\end{document}\n')
 
 
+def grown_box(full,box,minimum=8):
+    """Pixel box (left, top, right, bottom) for a producer's source_bbox_px, widened side by side while that
+    edge still cuts through ink, by at most 15% of the box each way (pencil marks on a scan
+    cross any edge, so the growth is kept small). A box set by eye on the downscaled page
+    often clips a label or the figure's lower half; the comparison should show the whole figure.
+    None when the box is outside the page or smaller than `minimum`."""
+    l,t=max(0,math.floor(box[0])),max(0,math.floor(box[1]))
+    r,b=min(full.width,math.ceil(box[0]+box[2])),min(full.height,math.ceil(box[1]+box[3]))
+    if r-l<minimum or b-t<minimum:return None
+    limit_x,limit_y=round((r-l)*.15),round((b-t)*.15)
+    return grown_sides(full,(l,t,r,b),(l-limit_x,t-limit_y,r+limit_x,b+limit_y))
+
+def grown_sides(full,sides,reach,step=4):
+    """Sides (left, top, right, bottom) moved outward while that edge still cuts through ink, each until it passes `reach`."""
+    l,t,r,b=sides
+    try:
+        gray=full.convert('L')
+        def inked(region):
+            low,_=gray.crop(region).getextrema();return low<140
+        for _ in range(400):
+            changed=False
+            if l>reach[0] and l>0 and inked((l,t,l+3,b)):l=max(0,l-step);changed=True
+            if r<reach[2] and r<full.width and inked((r-3,t,r,b)):r=min(full.width,r+step);changed=True
+            if t>reach[1] and t>0 and inked((l,t,r,t+3)):t=max(0,t-step);changed=True
+            if b<reach[3] and b<full.height and inked((l,b-3,r,b)):b=min(full.height,b+step);changed=True
+            if not changed:break
+    except (OSError,ValueError):pass
+    return l,t,r,b
+
+LOCATE_WORKERS=4
+LOCATE_RESERVE_SECONDS=8  # eleven figures of three pages took 4 to 5 s; a render that is this close to its wait is not made longer
+COMPARE_MIN_HEIGHT=400  # producer boxes were 330 to 450 pixels high; a crop cut close to a small figure is shown no smaller
+
+def near_its_wait(started):
+    """Is a render call that began at `started` (time.monotonic) close to its wait but not yet past it? Measuring
+    then would cost the host one more call. Once the wait has passed that call is already spent and the host comes
+    back for the result: first renders of 45 s and more went unmeasured that way, and the producer of one heard
+    "this line is solid on the source" only at its third render, with its two edits used up."""
+    if started is None:return False
+    wait=wait_seconds(RENDER_WAIT_SECONDS);spent=time.monotonic()-started
+    return wait-LOCATE_RESERVE_SECONDS<spent<wait
+
+def locate_figures(root,state,page,items,started=None):
+    """Find each figure's render on the source page (restoration_figure_locate) and keep the box to cut from the page.
+    Once per figure: a later render of the same figure sits at the same place of the page. A figure that was not
+    found is tried again only with a new render or a new source_bbox_px. No model call; about 0.4 s a figure.
+    `started` is when the render call began (time.monotonic): with little of its wait left the search is left
+    to later (near_its_wait), since a call that runs past its wait costs the host one more call."""
+    if near_its_wait(started):return
+    boxes=state.get('figure_sources',{}).get(str(page),{});kept=state.setdefault('figure_located',{}).setdefault(str(page),{});todo=[]
+    for item in items:
+        box=boxes.get(item['id']);seen=kept.get(item['id'])
+        if item['status']=='failed' or box is None:continue
+        if seen and seen['bbox']==list(box) and (seen['area'] or seen['render']==item.get('render_sha256')):continue
+        todo.append((item,list(box)))
+    if not todo:return
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        from PIL import Image
+        from restoration_figure_locate import locate,settled
+        with Image.open(shared._source(root,page)) as full:
+            full.load()
+            def one(pair):
+                item,box=pair;grown=grown_box(full,box)
+                if grown is None:return None
+                with Image.open(item['png']) as render:found=locate(full,box,render)
+                area=settled(full,box,grown,found,grown_sides)
+                return {'bbox':box,'area':list(area) if area else None,'score':round(found[4],3) if found else None,'render':item.get('render_sha256'),
+                        'found':[round(float(v),2) for v in found[:4]] if found else None}
+            with ThreadPoolExecutor(min(LOCATE_WORKERS,len(todo))) as pool:found=list(pool.map(one,todo))
+        for (item,_),value in zip(todo,found):
+            if value:kept[item['id']]=value
+    except Exception:pass  # an aid to the comparison; the producer's box is used as before
+
+def source_area(state,page,figure_id,full,box,minimum=8):
+    """Pixel box (left, top, right, bottom) of a figure's source crop: where its render was found on the page,
+    else the producer's source_bbox_px widened to ink. The producer's compare image, the reviewer's sheet
+    and the note picture all cut the same box."""
+    seen=state.get('figure_located',{}).get(str(page),{}).get(figure_id)
+    if seen and seen['area'] and seen['bbox']==list(box):return tuple(seen['area'])
+    return grown_box(full,box,minimum)
+
 def figure_review_key(root,page,value,item):
     """Approval depends on semantics and printed size, not only cached pixels."""
     a=assignment(root,page)
@@ -86,9 +181,13 @@ def figure_review_key(root,page,value,item):
                         'question':question,'id':item['id'],'width_mm':item['width_mm'],
                         'render':item['render_sha256']})
 
-def unused_output(path):
-    """Choose a revision without replacing a prior document or build receipt."""
-    requested=Path(path).resolve()
+def unused_output(path,base=None):
+    """Choose a revision without replacing a prior document or build receipt.
+    A relative name is placed in `base` (the source PDF's folder): the server's working folder is the
+    installed skill, where outputs would be lost to the next update."""
+    requested=Path(path)
+    if not requested.is_absolute() and base:requested=Path(base)/requested
+    requested=requested.resolve()
     if requested.suffix.lower()!='.hwpx':raise ValueError('output_must_end_hwpx')
     candidate=requested;revision=2
     while any(candidate.with_suffix(s).exists() for s in ('.hwpx','.build.json','.hwp','.pdf')):
@@ -224,11 +323,12 @@ def invalidate_output(state):
     if state.get('native_run'): state['output_stale']=True
     state['reviews']={};state.pop('review_notes',None)
 
-# Review severity: only math/answer-affecting discrepancies trigger a repair round.
-# Harmless OCR wording and diagram/cosmetic differences go to the 검수 노트 page.
+# Review severity: only issues that change what a student reads or answers trigger a repair round.
+# Diagram differences and cosmetic ones are recorded for the human checker on the 검수 노트 page.
 REPAIR_TAGS=('누락','오독','선지','잘림','정답')
 NOTE_TAGS=('도형','경미')
 PASSING=('passed','passed_with_notes')
+UNREVIEWED_ROLES=('review_notes','answer_sheet_more')  # printed mechanically; no review task of their own
 MAX_FAILED_VERDICTS=2  # the second failed verdict of a page is kept as notes instead of another repair round
 
 def max_failed_verdicts():
@@ -243,17 +343,50 @@ def issue_tag(text):
 def verdict(issues):
     if any(issue_tag(i) not in NOTE_TAGS for i in issues):return 'failed'  # untagged issues stay repairs
     return 'passed_with_notes' if issues else 'passed'
+FIGURE_WORDS=r'(?:그림|도형|그래프|도표)'
+# "the figure (or what is printed in it) is absent" and "cannot be solved or checked without the figure"
+FIGURE_ABSENT=re.compile(FIGURE_WORDS+r'[^.;]{0,20}(?:없|누락|빠[져졌짐]|생략|미복원|미출력)|'
+                         +FIGURE_WORDS+r'[^.;]{0,30}(?:불가|수 없|못\s*[풀푸구])|(?:불가|수 없|못\s*[풀푸구])[^.;]{0,30}'+FIGURE_WORDS)
+# Words for printed text or a wrong value, and quoted or typeset content: such a finding is about the text.
+TEXT_FINDING=re.compile(r'문구|문장|발문|배점|오타|글자|오답|다르|다름|틀[리렸린]|["\'“”‘’「」$]')
+def text_only_review(issues):
+    """Issues of a text-only job (include_figures=false), where figures are left out on purpose. A figure
+    difference is no finding. A repair asked only because a figure, or what is printed inside it, is absent
+    (the question cannot be solved from the output alone) becomes a note for the person who checks: no producer
+    can repair it. Anything that names printed text or a wrong value stays as the reviewer wrote it.
+    Returns (issues to keep, issues dropped)."""
+    kept=[];dropped=[]
+    for issue in issues:
+        tag=issue_tag(issue)
+        if tag=='도형':dropped.append(issue)
+        elif tag in REPAIR_TAGS and FIGURE_ABSENT.search(issue) and not TEXT_FINDING.search(issue):
+            body=re.sub(r'^\s*\[?\s*'+tag+r'\s*\]?\s*[:：\-—]?\s*','',issue)
+            kept.append('경미: (텍스트 전용 작업이라 수정하지 않음) '+body)
+        else:kept.append(issue)
+    return kept,dropped
+MEASURED_NOTE=re.compile(r'^도형: (q\d+) 자동 측정 — ([^:]+):')
+def fold_measured(own,measured):
+    """A measured slip of a figure the reviewer noted too goes into that note (one table row, one picture),
+    not into a second row: both said the same of q20 in a real run."""
+    own=list(own);rest=[]
+    for issue in measured:
+        m=MEASURED_NOTE.match(issue)
+        at=next((i for i,x in enumerate(own) if m and issue_tag(x)=='도형' and re.search(r'(?<![A-Za-z0-9])'+m.group(1)+r'(?!\d)',x)),None)
+        if at is None:rest.append(issue)
+        else:own[at]=f'{own[at]} (엔진 측정: {m.group(2)})'
+    return own+rest
 def current_notes(state):
     """Reviewer notes plus measured figure slips left after the producer's one fix (measured_slips)."""
     measured=state.get('geometry_notes',{});stated=state.get('relation_notes',{});rows=[]
     for n,r in sorted(state['reviews'].items(),key=lambda x:int(x[0])):
         if r['status'] not in PASSING:continue
-        issues=((r['issues'] if r['status']=='passed_with_notes' else [])+[i for found in measured.get(n,{}).values() for i in found]
-                +[i for found in stated.get(n,{}).values() for i in found])
+        issues=(fold_measured(r['issues'] if r['status']=='passed_with_notes' else [],[i for found in measured.get(n,{}).values() for i in found])
+                +[i for found in stated.get(n,{}).values() for i in found]+list(state.get('layout_notes',{}).get(n,[]))
+                +[i for found in state.get('unfinished_notes',{}).get(n,{}).values() for i in found])
         if issues:rows.append({'page':int(n),'issues':issues})
     return rows
 
-def measured_slips(state,page,items,lint):
+def measured_slips(state,page,items,lint,texts=None):
     """Geometry near-misses measured on each rendered PDF (restoration_figure_geometry), no model call.
     The producer sees a figure's slips once, beside its first compare image, so the fix rides along with
     its own visual check. Slips still measured later are kept as 검수 노트 rows instead of another round."""
@@ -262,13 +395,85 @@ def measured_slips(state,page,items,lint):
     rounds=state.setdefault('geometry_rounds',{});notes=state.setdefault('geometry_notes',{}).setdefault(str(page),{})
     for item in items:
         if item['status']=='failed':continue
-        found=geometry_warnings(Path(item['png']).with_name('diagram.pdf'))
+        found=geometry_warnings(Path(item['png']).with_name('diagram.pdf'),(texts or {}).get(item['id']))
         if not found:notes.pop(item['id'],None);continue
         # One table row per figure: the first slip, and how many more.
         more=f" 외 {len(found)-1}곳" if len(found)>1 else ''
         notes[item['id']]=[f"도형: {item['question_id']} 자동 측정 — {found[0].split('. ')[0]}{more}"]
         key=f"{page}/{item['id']}"
         if not rounds.get(key):rounds[key]=1;lint.setdefault(item['id'],[]).extend(found)
+
+def length_line_slips(state,page,items,lint):
+    """A length printed on a straight dashed line where the figure draws length arcs elsewhere
+    (restoration_figure_geometry.length_line_findings). Said once per figure, at the render where it first shows:
+    that is often the second one, after the producer answered "no length arc" by drawing only some of them.
+    While it is still measured it is also a 검수 노트 row for the human checker (where measured_slips left none):
+    the first live producer that was told read the source's dotted arc as a dashed line and kept its drawing."""
+    try:from restoration_figure_geometry import length_line_warnings
+    except ImportError:return
+    rounds=state.setdefault('length_line_rounds',{});notes=state.setdefault('geometry_notes',{}).setdefault(str(page),{})
+    for item in items:
+        key=f"{page}/{item['id']}"
+        if item['status']=='failed':continue
+        found=length_line_warnings(Path(item['png']).with_name('diagram.pdf'))
+        if not found:continue
+        if item['id'] not in notes:notes[item['id']]=[f"도형: {item['question_id']} 자동 측정 — {found[0].split('. ')[0]}(원본이 점선 호인지 확인)"]
+        if not rounds.get(key):rounds[key]=1;lint.setdefault(item['id'],[]).extend(found)
+
+def source_line_slips(root,state,page,items,lint,started=None):
+    """A dashed straight line of the render that is one unbroken line on the source page (restoration_figure_source),
+    read where locate_figures found the render. Told once per figure as a measurement: the producer that was asked
+    "is the source a dotted arc here?" answered that the source is dashed and kept its drawing (8 of 11 runs of one
+    figure were delivered that way). While it is still measured it is the figure's 검수 노트 row.
+    Read once per render; left to the next render when this call is close to its wait."""
+    kept=state.get('figure_located',{}).get(str(page),{});seen=state.setdefault('source_lines',{});rounds=state.setdefault('source_line_rounds',{})
+    notes=state.setdefault('geometry_notes',{}).setdefault(str(page),{});boxes=state.get('figure_sources',{}).get(str(page),{});full=None
+    try:
+        for item in items:
+            key=f"{page}/{item['id']}";place=kept.get(item['id']);sha=item.get('render_sha256')
+            if item['status']=='failed' or not place or not place.get('found'):continue
+            old=seen.get(key)
+            if not old or old['render']!=sha:
+                if near_its_wait(started):continue
+                from PIL import Image
+                from restoration_figure_source import source_line_findings
+                if full is None:
+                    full=Image.open(shared._source(root,page));full.load()
+                found=place['found']
+                if place.get('render')!=sha:  # the place was found with an earlier render: its ink box may have changed
+                    from restoration_figure_locate import locate
+                    with Image.open(item['png']) as render:found=locate(full,boxes.get(item['id'],place['bbox']),render)
+                old=seen[key]={'render':sha,'found':source_line_findings(full,item['png'],Path(item['png']).with_name('diagram.pdf'),found) if found else []}
+            if not old['found']:continue
+            said=old['found'][0].split('(추정이')[0].replace('원본은 실선: ','')
+            others=[n for n in notes.get(item['id'],[]) if '직선 점선 위의 길이' not in n and '끊기지 않은 실선' not in n][:1]
+            notes[item['id']]=[f"도형: {item['question_id']} 자동 측정 — {said}"]+others
+            if not rounds.get(key):
+                rounds[key]=1;lint[item['id']]=[t for t in lint.get(item['id'],[]) if not t.startswith('직선 점선 위의 길이')]+old['found']
+    except Exception:pass  # a measuring aid
+    finally:
+        if full is not None:full.close()
+
+def late_measurements(root,state,page,items):
+    """What locate_figures and source_line_slips left for later because the render call was close to its wait, made
+    now that the producer submits its verdicts: {figure id: warnings} for lines that are only now known to be solid
+    on the source. With a 45 s wait and renders of 43 to 96 s on a busy machine, three of four producers accepted
+    a figure whose three dashed radii were never read (the fourth, read in time, was told and fixed them)."""
+    late={}
+    locate_figures(root,state,page,items);source_line_slips(root,state,page,items,late)
+    return late
+
+def brief_repeats(lint):
+    """The same advice for a second figure of one response keeps its first sentence only. Every warning is read
+    again by each later call, and a response past the host's size limit costs the producer one more call
+    (seen once in each of three runs, with the length advice given in full to two figures)."""
+    seen=set()
+    for fid,texts in lint.items():
+        for i,text in enumerate(texts):
+            head,dot,rest=text.partition('. ');kind=head.split(':')[0]
+            if dot and len(rest)>80 and kind in seen:texts[i]=head+'. (안내는 위 도형과 같습니다.)'
+            seen.add(kind)
+    return lint
 
 def relation_slips(state,page,items,lint):
     """Position relations the question text states (restoration_relations, read when the page was submitted),
@@ -336,38 +541,102 @@ def note_row(issue,page_label,labels):
     tag=issue_tag(body) or '기타'
     text=re.sub(r'^\s*\[?\s*'+re.escape(tag)+r'\s*\]?\s*[:：\-—]?\s*','',body) if tag!='기타' else body.strip()
     found=re.search(r'(?<![A-Za-z0-9])[qQ](\d+)(?!\d)|((?:논술형|서술형|서답형)\s*\d+)',text)
-    question='-'
+    question='-';qid=None
     if found:
         question=labels.get('q'+found.group(1),f'{found.group(1)}번') if found.group(1) else found.group(2).replace(' ','')
+        qid='q'+found.group(1) if found.group(1) else next((k for k,v in labels.items() if v==question),None)
         if found.start()==0:text=text[found.end():].lstrip(' :：,-—')  # the 문항 column already names it
     text=text if len(text)<=170 else text[:167]+'…'
-    return {'page':page_label,'question':question,'kind':('미해결·' if unresolved else '')+tag,'text':text or '-'}
+    return {'page':page_label,'question':question,'kind':('미해결·' if unresolved else '')+tag,'text':text or '-',
+            **({'question_id':qid} if qid in labels else {})}
+
+NOTE_IMAGE_WIDTH_MM=96   # inside the 검수 내용 column of the notes table
+NOTE_IMAGE_MAX_MM=62     # tallest picture of one note row
+NOTE_PAGE_BUDGET_MM=225-9-30  # table height of one notes page less its header row and title lines
+
+def note_image(root,state,page,qid,figure):
+    """Picture for one note row, or None: for a figure note the source crop beside the output figure, for a text
+    note the source spots the producer had to enlarge in that question. The file name follows its inputs, so
+    assembling the pages again gives the same page."""
+    try:
+        from PIL import Image
+        from restoration_montage import montage,side_by_side
+        folder=Path(root)/'mcp/notes';pairs=[]
+        with Image.open(shared._source(root,page)) as full:
+            def crop(box,minimum,figure_id=None):
+                area=source_area(state,page,figure_id,full,box,minimum) if figure else None
+                if not figure:
+                    l,t=max(0,math.floor(box[0])),max(0,math.floor(box[1]))
+                    r,b=min(full.width,math.ceil(box[0]+box[2])),min(full.height,math.ceil(box[1]+box[3]))
+                    area=(l,t,r,b) if r-l>=minimum and b-t>=minimum else None
+                return full.crop(area) if area else None
+            if figure:
+                selected=state['figures'].get(str(page));boxes=state.get('figure_sources',{}).get(str(page),{})
+                if not selected:return None
+                for item in job.load_json(Path(selected['path']).parent/'batch.json')['items']:
+                    box=boxes.get(item['id'])
+                    if item.get('question_id')!=qid or box is None or not Path(item.get('png','')).is_file():continue
+                    part=crop(box,8,item['id'])
+                    if part is None:continue
+                    key=fingerprint([item['id'],item.get('render_sha256'),box,list(part.size)])[:16];folder.mkdir(parents=True,exist_ok=True)
+                    out=folder/f'{item["id"]}-{key}.png'
+                    if not out.is_file():
+                        temp=folder/f'{item["id"]}-{key}-source.png';part.save(temp)
+                        side_by_side(temp,item['png'],out,label_left='원본',label_right='출력',max_height=420,white=True);temp.unlink()
+                    pairs.append((item['id'],out))
+            else:
+                spots=[s for s in state.get('uncertain',{}).get(str(page),[]) if s['question_id']==qid][:3]
+                for s in spots:
+                    part=crop(s['bbox_px'],4)
+                    if part is None:continue
+                    scale=max(1,min(3,600//max(1,part.width)))
+                    if scale>1:part=part.resize((part.width*scale,part.height*scale),Image.LANCZOS)
+                    key=fingerprint([page,s['bbox_px']])[:16];folder.mkdir(parents=True,exist_ok=True)
+                    out=folder/f'spot-{key}.png'
+                    if not out.is_file():part.save(out)
+                    pairs.append(('source '+s['id'],out))
+        if not pairs:return None
+        if len(pairs)==1:path=pairs[0][1]
+        else:
+            path=folder/('sheet-'+fingerprint([str(p) for _,p in pairs])[:16]+'.png')
+            if not path.is_file():montage(pairs,path)
+        with Image.open(path) as im:ratio=im.height/im.width
+        width=min(NOTE_IMAGE_WIDTH_MM,NOTE_IMAGE_MAX_MM/ratio)
+        return {'path':str(path),'sha256':job.digest(path),'size_mm':[round(width,1),round(width*ratio,1)]}
+    except (OSError,ValueError,KeyError,ImportError):return None  # the note text stands on its own
 
 def append_review_notes(root,pages):
-    """Mechanical 검수 노트 table page placed before the answer sheet; never reviewed, rebuilt only after all pages pass."""
+    """Mechanical 검수 노트 table pages placed before the answer sheet; never reviewed, rebuilt only after all pages pass."""
     path=Path(root)/'mcp/state.json'
-    notes=job.load_json(path).get('review_notes') if path.exists() else None
+    state=job.load_json(path) if path.exists() else {}
+    notes=state.get('review_notes')
     if not notes:return pages
     from restoration_answers import note_row_height
-    rows=[];budget=225-9-30;dropped=0  # table height budget less header row and title lines
+    sheets=[[]];budget=NOTE_PAGE_BUDGET_MM
     for item in notes:
         source=next((p for p in pages if p['page_number']==item['page']),{})
         answer=source.get('role')=='answer_sheet'
         labels={q['id']:printed_label(q) for q in source.get('questions',[])} if not answer else {}
         for issue in item['issues']:
             row=note_row(issue,'정답표' if answer else f"{item['page']}쪽",labels)
-            if budget-note_row_height(row['text'])<0:dropped+=1;continue
-            budget-=note_row_height(row['text']);rows.append(row)
-    if dropped:rows.append({'page':'-','question':'-','kind':'생략','text':f'외 {dropped}건은 review 폴더의 검수 보고서를 확인하세요.'})
-    template=pages[0];w,h=template['size_mm'];box=[10,15,w-20,h-30]
-    page=deepcopy(template)
-    page.update(page_number=max(p['page_number'] for p in pages)+1,role='review_notes',worker_id='mechanical-review-notes',
-                assignment_id='mechanical-review-notes',blocks=[],issues=[],regions=[{'id':'notes','bbox_mm':box}],note_rows=rows,
-                questions=[{'id':'review-notes','region_id':'notes','bbox_mm':box,'font_family':'함초롬바탕','font_pt':10,
-                            'content':[{'id':'review-notes-title','kind':'paragraph','runs':[{'kind':'text','text':'검수 노트'}]}]}])
-    for key in ('answer_rows','answer_review_questions','answer_reference'):page.pop(key,None)
+            qid=row.pop('question_id',None)
+            image=None if answer or qid is None else note_image(root,state,item['page'],qid,row['kind'].endswith('도형'))
+            if image:row['image']=image
+            height=note_row_height(row['text'],image)
+            if sheets[-1] and budget-height<0:sheets.append([]);budget=NOTE_PAGE_BUDGET_MM
+            budget-=height;sheets[-1].append(row)
+    template=pages[0];w,h=template['size_mm'];box=[10,15,w-20,h-30];made=[]
+    for index,rows in enumerate(sheets,1):
+        page=deepcopy(template)
+        page.update(page_number=max(p['page_number'] for p in pages)+index,role='review_notes',worker_id='mechanical-review-notes',
+                    assignment_id='mechanical-review-notes',blocks=[],issues=[],regions=[{'id':'notes','bbox_mm':box}],note_rows=rows,
+                    questions=[{'id':'review-notes','region_id':'notes','bbox_mm':box,'font_family':'함초롬바탕','font_pt':10,
+                                'content':[{'id':'review-notes-title','kind':'paragraph','runs':[{'kind':'text','text':'검수 노트'}]}]}])
+        if len(sheets)>1:page['note_part']=[index,len(sheets)]
+        for key in ('answer_rows','answer_review_questions','answer_reference','row_plan','figure_scale'):page.pop(key,None)
+        made.append(page)
     at=next((i for i,p in enumerate(pages) if p.get('role')=='answer_sheet'),len(pages))
-    return pages[:at]+[page]+pages[at:]
+    return pages[:at]+made+pages[at:]
 
 
 def reconsider_selected_figure(root,state,page,item):
@@ -435,10 +704,15 @@ def collect_native(root,state):
         # The fixed grid keeps source pages; an actionable target avoids guess-and-rebuild loops.
         # A table pushed past the page adds a page without any cell reporting overflow, so rank by figure load too.
         issues=native.get('content_fit',{}).get('issues',[])
-        over=sorted({i['block_id'] for i in issues if i.get('code')=='question_cell_content_overflow'})
-        try:heavy=figure_load(root,state)[:3]
+        found=[i for i in issues if i.get('code') in ('question_cell_content_overflow','question_cell_expanded')]
+        over=sorted({i['block_id'] for i in found});pages=sorted({i['page'] for i in found if 'page' in i})
+        again=refit_and_rebuild(root,state,native)
+        if again is not None:return again
+        try:heavy=[r for r in figure_load(root,state) if not pages or r['page'] in pages][:3]
         except (OSError,ValueError,KeyError):heavy=[]  # guidance aid only
-        return {'status':'failed','message':'content_exceeds_source_page','overflow_questions':over,'figure_heavy_questions':heavy,'log':run.get('log'),
+        return {'status':'failed','message':'content_exceeds_source_page','overflow_questions':over,'overflow_pages':pages,
+                'overflow_mm':[{'page':i.get('page'),'question_id':i['block_id'],'content_mm':i['actual_mm'],'room_mm':i['available_mm']} for i in found if 'actual_mm' in i],
+                'figure_heavy_questions':heavy,'log':run.get('log'),
                 'next_action':'Send the listed questions to their producer (overflow_questions, else the top figure_heavy_questions): figures stack vertically in an equal share of the column, '
                               'so draw side-by-side source panels as ONE figure and shrink the tallest figures\' width_mm (about 20%, keeping every mark and label) in the % width_mm header, '
                               'rerender with hwp_render_figures(job,page), then hwp_build again. Never delete source content to fit.'}
@@ -447,10 +721,13 @@ def collect_native(root,state):
                 'next_action':'Other restoration jobs on this PC kept Hangul busy. Wait a few minutes, then call hwp_build again with the same output path.'}
     if native.get('status')!='rendered' or native.get('review_inputs',{}).get('status')!='pending_review':
         return {'status':'failed','message':native.get('error','native_review_inputs_missing'),'next_action':'Report the native failure and saved log. Never declare completion from HWPX alone.','log':run.get('log')}
-    everything=job.assemble(root);assembled=[p for p in everything if p.get('role')!='review_notes']
-    notes_page=len(assembled)!=len(everything)
+    # Reviewed pages: the question pages and the answer sheet. Notes pages and the further pages of a long
+    # answer table are printed without a review of their own.
+    everything=job.assemble(root);assembled=[p for p in everything if p.get('role') not in UNREVIEWED_ROLES]
+    unnoted=[p for p in everything if p.get('role')!='review_notes']
+    notes_page=len(unnoted)!=len(everything)
     if native.get('job')!=str(root) or native.get('pages_sha256')!=batch.pages_digest(everything):
-        if notes_page and native.get('job')==str(root) and native.get('pages_sha256')==batch.pages_digest(assembled):
+        if notes_page and native.get('job')==str(root) and native.get('pages_sha256')==batch.pages_digest(unnoted):
             return {'status':'notes_build_required','review_notes':state.get('review_notes',[]),
                     'next_action':'All pages passed. Call hwp_build once with the same output path to add the 검수 노트 page '
                                   'before the answer sheet; that page needs no review. Do not send notes to producers.'}
@@ -479,6 +756,15 @@ def collect_native(root,state):
                   'output_size_px':output_size_px}
             if answer_page:
                 task.update(kind='answer_sheet',instructions=data['instructions'],question_id='answer-sheet')
+                for extra in data.get('more_output_images',[]):
+                    if job.digest(extra['path'])!=extra['sha256']: raise ValueError('review_image_changed')
+                    task.setdefault('more_output_images',[]).append(shared._register(staged,extra['path']))
+                # The table's numbers and answers are compared here, without a model: a verified table is not read
+                # off its image again, the reviewer only recomputes the answers.
+                try:
+                    from restoration_answers import answer_table_check
+                    task['table_check']=answer_table_check(native.get('source'),(native['artifacts'].get('hwpx') or {}).get('path'),assembled[position-1]['answer_rows'])
+                except Exception as exc:task['table_check']={'verified':False,'problems':['check_failed: '+type(exc).__name__]}
             else:
                 with Image.open(source) as image:
                     task['source_size_px']=list(image.size)
@@ -492,7 +778,8 @@ def collect_native(root,state):
                 'content':batch.native_page(assembled[position-1])})
             bindings[str(n)]=fingerprint({'source':job.digest(source),
                 'output':data['output_image']['sha256'],'page':n,'position':position,'count':count,
-                'content':batch.native_page(assembled[position-1])})
+                'content':batch.native_page(assembled[position-1]),
+                **({'more_output':[x['sha256'] for x in data['more_output_images']]} if data.get('more_output_images') else {})})
             content_bindings[str(n)]=content_binding
             previous=state.get('page_review_cache',{}).get(str(n),{})
             semantic_answer_reuse=False
@@ -568,13 +855,71 @@ def collect_native(root,state):
                        'failed':[{'page':int(n),'issues':r['issues']} for n,r in sorted(state['reviews'].items()) if r['status'] not in PASSING]},
             'next_action':('Deliver artifacts and list review_notes as items for the human check.' if notes else 'Deliver artifacts.') if complete else
                 ('Same independent reviewer checks only review_tasks and saves its report at report_path. '
-                 'First build: spawn one non-producer reviewer with the role file, job, review_tasks and report_path in its first prompt (it starts at once). '
+                 'First build: spawn one non-producer reviewer (Antigravity TypeName = reviewer_type) with the role file, job, review_tasks and report_path in its first prompt (it starts at once). '
                  'Record passed and failed pages with hwp_finish_review before repairs.')}
     if notes:result['review_notes']=notes
+    if complete:
+        sheets=figure_check_sheets(root,state,selected,run.get('build_output'))
+        if sheets:
+            result['figure_check_images']=sheets
+            result['next_action']+=' Also tell the user the figure_check_images: every figure beside its source, to check by eye.'
     if not complete:
         report=root/'review'/f"round-{state.get('review_round',0)+1:02d}.md";result['report_path']=str(report)
-        if not report.exists():write_report_skeleton(root,report,result['review_tasks'])
+        if not state.get('reviewer_id'):result['reviewer_type']=subagent_type('hwp-restoration-reviewer')
+        if not report.exists():write_report_skeleton(root,report,result['review_tasks'],state)
     return result
+
+MAX_REFITS=2  # engine-made exports after an overflow before the failure goes to the main agent
+# Edits of one figure after its first render. One producer spent 16 renders on a single figure; with a limit of three,
+# the third edit of the one figure that reached it put back the picture of the first render.
+FIGURE_FIX_LIMIT=2
+
+def refit_and_rebuild(root,state,native):
+    """An overflow is first handled here, with no model call: the failed export's own measurements give the
+    overflowing question more rows of its column or, failing that, shrink its figures a little
+    (restoration_refit), and the same build is exported again. None when nothing more can be done."""
+    params=state.get('build_params');fit=native.get('content_fit') or {}
+    if not params or state.get('refit_rounds',0)>=MAX_REFITS or not fit.get('question_cells'):return None
+    try:
+        from restoration_refit import refit
+        labels={(n,q['id']):printed_label(q) for n in question_pages(job._manifest(root)) for q in reading(root,state,n)['questions']}
+        # Only question cells are refitted: an overflowing answer table or notes page is not a layout of rows.
+        if any((i.get('page'),i.get('block_id')) not in labels for i in fit.get('issues',[]) if i.get('code')=='question_cell_content_overflow'):return None
+        plan=refit(fit,state.get('row_plans',{}),state.get('figure_scales',{}),labels)
+    except (ImportError,ValueError,KeyError,OSError):return None
+    if plan is None:return None
+    state['refit_rounds']=state.get('refit_rounds',0)+1
+    state.setdefault('row_plans',{}).update(plan['row_plans']);state.setdefault('figure_scales',{}).update(plan['figure_scales'])
+    state.setdefault('refit_log',[]).extend(plan['log'])
+    notes=state.setdefault('layout_notes',{})
+    for n,scales in plan['figure_scales'].items():
+        notes[n]=[f"경미: {labels.get((int(n),q),q)} 도형을 칸에 맞추려고 {round((1-v)*100)}% 줄였습니다(엔진 자동 조정)." for q,v in sorted(scales.items())]
+    # The failed export was never delivered: its files give way so the retry keeps the requested name.
+    failed=Path(state['native_run'].get('build_output') or '')
+    try:
+        receipt=failed.with_suffix('.build.json')
+        if failed.suffix.lower()=='.hwpx' and receipt.is_file() and job.load_json(receipt).get('job')==str(root):
+            failed.unlink(missing_ok=True);receipt.unlink()
+    except (OSError,ValueError):pass
+    save(root,state)  # assembling the pages reads the plan from the saved state
+    result=perform('build',{**params,'native':True,'_refit':True},root,state)
+    if isinstance(result,dict) and result.get('status')=='building':
+        result['message']='refitting_overflow';result['adjustments']=plan['log']
+        result['next_action']=('A question did not fit its page; the engine adjusted the layout itself and is exporting again. '
+                               'Do not involve producers: call hwp_status(job) again, it waits up to 30 s for the export.')
+    return result
+
+def layout_adjustments(root,pages):
+    """Row plans and figure scales the engine chose after an overflow (refit_and_rebuild), attached to their pages."""
+    path=Path(root)/'mcp/state.json'
+    state=job.load_json(path) if path.exists() else {}
+    plans,scales=state.get('row_plans') or {},state.get('figure_scales') or {}
+    for page in pages:
+        n=str(page['page_number']);ids={q['id'] for q in page['questions']}
+        if plans.get(n) and set(plans[n])==ids:page['row_plan']=plans[n]
+        kept={q:v for q,v in (scales.get(n) or {}).items() if q in ids}
+        if kept:page['figure_scale']=kept
+    return pages
 
 STACK_WARNING_SHARE=.7  # completed runs peaked at .65; the observed extra-page overflow was .73
 
@@ -582,14 +927,17 @@ def page_figure_load(root,page,value,items):
     """Stacked figure height per question of one page against its automatic slot (source mm)."""
     from PIL import Image
     height_mm=job._manifest(root)['pages'][page-1]['height_mm'];rows=[]
-    per_column={c:sum(q['column']==c for q in value['questions']) for c in ('left','right')}
+    per_column={c:[x['id'] for x in value['questions'] if x['column']==c] for c in ('left','right')}
+    def rows_of(q):
+        ids=per_column[q['column']];n,i=len(ids),ids.index(q['id'])
+        return ((i+1)*6)//n-(i*6)//n if 1<=n<=6 else 6/max(1,n)
     for q in value['questions']:
         total=0.0
         for item in items:
             if item.get('question_id')!=q['id'] or not Path(item.get('png') or '').is_file():continue
             with Image.open(item['png']) as im:total+=item['width_mm']*im.height/im.width
         if total:
-            slot=height_mm*.9/max(1,per_column[q['column']])
+            slot=height_mm*.9*rows_of(q)/6
             rows.append({'page':page,'question_id':q['id'],'label':printed_label(q),'figures_mm':round(total,1),
                          'slot_mm':round(slot,1),'share':round(total/slot,2)})
     return rows
@@ -604,19 +952,79 @@ def figure_load(root,state):
         except (OSError,ValueError,KeyError):continue
     return sorted(rows,key=lambda r:-r['share'])
 
-def write_report_skeleton(root,report,tasks):
+def review_text(root,state,report,page):
+    """The page's accepted Markdown without its answer blocks, saved beside the report: the text and equations
+    of the output are produced from exactly this, so the reviewer compares the source with it instead of
+    reading small symbols off the output image."""
+    ref=state['pages'].get(str(page),{}).get('reading_md')
+    if not ref:return None
+    try:
+        from restoration_answers import split_answers_detailed
+        clean=split_answers_detailed(job._artifact(root,ref).read_text(encoding='utf-8'))[0]
+        path=report.parent/f'{report.stem}-page-{page:04d}.md';path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text(clean.strip()+'\n',encoding='utf-8');return path
+    except (OSError,ValueError,KeyError):return None
+
+def write_report_skeleton(root,report,tasks,state=None):
     """Reviewer report with every reviewed path filled in: the reviewer only writes verdicts and records."""
     lines=[f'# 최종 검수 보고 {report.stem}','',f'job: {root}',
-           '각 쪽의 판정·issues와 기록 줄만 채웁니다. 경로 줄은 지우거나 바꾸지 않습니다.','']
+           '이 파일이 이번 회차의 검수 과제 전부입니다. 아래 쪽만 검수하고, 각 쪽의 판정·issues와 기록 줄만 채웁니다. 경로 줄은 지우거나 바꾸지 않습니다.',
+           '쪽마다 그 쪽의 파일 전부를 한 번의 응답에서 함께 엽니다(쪽당 1턴). 파일을 하나씩 따로 열지 않습니다.',
+           'issues 태그: 수정 대상은 누락/오독/선지/잘림/정답, 노트는 도형/경미. 문구 차이가 요구하는 답·조건·정답을 바꾸지 않으면 `경미:`입니다.','']
+    try:figures=figures_wanted(root)
+    except (OSError,ValueError,KeyError):figures=True
+    if not figures:
+        lines[-1:]=['**이 작업은 사용자 요청으로 글과 수식만 복원했습니다(include_figures=false). 검수도 글 기준으로 합니다.**',
+                    '- 대조 대상: 원본에 글로 인쇄된 번호·발문·조건·수식·숫자·글로 된 선지·배점. 수정 대상과 `경미:`를 가르는 기준은 역할 지침 그대로입니다.',
+                    '- 문제가 아닌 것: 그림·그래프·도형이 출력에 없는 것, 그림 안에만 인쇄된 글자·수치·점 이름, 그림으로 된 선지. '
+                    '그림이 없어 출력만으로는 풀 수 없는 문항도 정상입니다. 이런 것은 어떤 태그로도 적지 않고(`누락:`·`오독:`·`도형:`·`정답:` 모두 아님) 도형 줄도 쓰지 않습니다.',
+                    '- 정답 검산은 원본 쪽 이미지의 그림을 보고 합니다. 출력 글만으로 풀 수 없다는 것은 실패 사유가 아닙니다.','']
     for task in tasks:
-        answer=task.get('kind')=='answer_sheet'
+        answer=task.get('kind')=='answer_sheet';checked=answer and (task.get('table_check') or {}).get('verified')
         lines+=[f"## page {task['page']}{' (정답표)' if answer else ''}",
                 f"- {'answer_reference' if answer else 'source_image'}: {task.get('answer_reference') or task.get('source_image')}",
-                f"- output_image: {task['output_image']}"]
+                (f"- 표 대조: 엔진 확인 완료 — 출력 정답표 {task['table_check']['cells']}칸의 번호·답이 정답 블록과 같고 칸을 넘는 수식이 없습니다. "
+                 '출력 표 이미지는 열지 않고 답만 검산합니다.') if checked else f"- output_image: {task['output_image']}"]
+        if answer and not checked:
+            # A long answer table continues on further pages: they are read with the first one.
+            lines+=[f"- output_image (정답표 {index}번째 쪽, 같은 턴에 함께 연다): {path}" for index,path in enumerate(task.get('more_output_images',[]),2)]
+        if not answer and state is not None:
+            text=review_text(root,state,report,task['page'])
+            if text:lines.append(f"- output_text: {text}")
+            # Off unless HWP_REVIEW_TILES=1. With 12 errors written into two pages, reviewers found 10, 10, 10 of them
+            # with the tiles and 12, 10, 11 without (muse twice, Gemini once), in 2.9 against 2.2 minutes: comparing a
+            # page with its output_text needs less resolution than reading it, and ten files a page became four.
+            try:tiles=source_tiles(root,task['page']) if os.environ.get('HWP_REVIEW_TILES')=='1' else []
+            except (OSError,ValueError):tiles=[]
+            if tiles:
+                # One path per line: a folder with a file range made the reviewer list the folder first.
+                lines.append('- source_tiles (원본 픽셀 확대 조각. 이 쪽의 다른 파일과 같은 턴에 모두 연다):')
+                lines+=[f"  - {t['name']}: {t['path']}" for t in tiles]
         if task.get('figure_sheet'):lines.append(f"- figure_sheet: {task['figure_sheet']}")
-        if task.get('uncertain_regions'):lines.append(f"- uncertain_regions: {task['uncertain_regions']['image']}")
+        if task.get('uncertain_regions'):
+            lines.append(f"- uncertain_regions: {task['uncertain_regions']['image']}")
+            lines+=[f"  - {s['question_id']} {s['id']}: {s['reason']}" for s in task['uncertain_regions'].get('spots',[])]
+        sizes=[f"{k}={task[k]}" for k in ('source_size_px','output_size_px') if task.get(k)]
+        if sizes:lines.append('- 크기(px): '+', '.join(sizes))
+        scope=task.get('answer_review_scope')
+        if answer and scope:
+            lines.append(f"- 검산 범위: mode={scope['mode']}, output_image_unchanged={str(scope['output_image_unchanged']).lower()}"
+                         +(f", question_keys={scope['question_keys']}" if scope['mode']=='changed_questions' else ''))
+            for q in scope.get('changed_questions',[]):
+                lines.append(f"  - {q.get('label','')} ({q.get('kind','')}) 답 {q.get('answer','')} / 원본 {q.get('source_image','')}")
+        if checked:lines.append('- 지시: answer_reference의 문항과 후보 근거를 읽고 답을 독립 계산으로 확인하세요(검산 범위가 changed_questions이면 그 문항만). '
+                                '이미 본 원본은 재사용합니다. 오답·누락은 `정답:`으로 적습니다.')
+        elif answer and task.get('instructions'):lines.append(f"- 지시: {task['instructions']}")
+        if answer and not figures:
+            lines.append('- 텍스트 전용 작업의 검산: answer_reference의 문항 글에는 그림이 없습니다. 그림이 필요한 문항은 앞서 본 원본 쪽 이미지의 그림에서 '
+                         '길이·각도와 구하는 각·변의 위치를 읽어 검산합니다. 글만으로 풀 수 없다는 이유로 `정답:`을 적지 않습니다. '
+                         '계산한 값이 표의 답과 다르거나 후보 답과 그 근거가 서로 맞지 않으면 `정답:`입니다. '
+                         +(f'그림의 값이 작아 읽히지 않으면 그 쪽의 확대 조각 `{Path(root)/"pages"/"page-NNNN-tiles"/"tile-K.png"}`'
+                           '(NNNN은 원본 쪽 번호 네 자리, K는 1~6: 왼쪽 단 위·가운데·아래, 오른쪽 단 위·가운데·아래) 가운데 해당 조각 하나를 열어 읽습니다. '
+                           '그래도 읽을 수 없을 때만 ' if source_tiles_enabled() else '그림의 값을 끝내 읽을 수 없을 때만 ')
+                         +'`경미: 정답 미확인 (원본 쪽·번호)`로 적습니다.')
         lines+=['- 판정: (passed / passed_with_notes / failed)','- issues:']
-        if not answer:lines+=['- 선택지 행:','- 도형:']
+        if not answer:lines+=['- 선택지 행:']+(['- 도형:'] if figures else [])
         lines.append('')
     report.parent.mkdir(parents=True,exist_ok=True);report.write_text('\n'.join(lines),encoding='utf-8')
 
@@ -689,16 +1097,32 @@ def review_figure_sheet(root,state,page):
             for item in items:
                 box=boxes.get(item['id'])
                 if box is None or not Path(item.get('png','')).is_file():continue
-                l,t=max(0,math.floor(box[0])),max(0,math.floor(box[1]))
-                r,b=min(full.width,math.ceil(box[0]+box[2])),min(full.height,math.ceil(box[1]+box[3]))
-                if r-l<8 or b-t<8:continue
-                crop=shared._fresh(root,'.png');full.crop((l,t,r,b)).save(crop)
-                pairs.append((item['id'],side_by_side(crop,item['png'],shared._fresh(root,'.png'),label_left='source '+item['id'],label_right='output figure')))
+                area=source_area(state,page,item['id'],full,box)
+                if area is None:continue
+                crop=shared._fresh(root,'.png');full.crop(area).save(crop)
+                pairs.append((item['id'],side_by_side(crop,item['png'],shared._fresh(root,'.png'),label_left='source '+item['id'],label_right='output figure',min_height=COMPARE_MIN_HEIGHT)))
         if not pairs:return None
         if len(pairs)==1:return pairs[0][1]
         from restoration_montage import montage
         return montage(pairs,shared._fresh(root,'.png'))
     except (OSError,ValueError,KeyError):return None  # optional aid; review still uses full source/output pages
+
+def figure_check_sheets(root,state,pages,output):
+    """The reviewer's pairs (source crop, delivered figure) of every figure, one image per page, copied beside the
+    delivered file for the person who checks it. In eleven runs of one exam the reviewer named about 11 of 40
+    counted figure defects and 13 of its 28 figure notes described the figure wrongly; until now a person saw
+    a pair only for figures that had a note. No model call."""
+    if not output:return []
+    import shutil
+    saved=[]
+    for n in pages:
+        try:
+            sheet=review_figure_sheet(root,state,n)
+            if not sheet:continue
+            target=Path(output).with_name(f'{Path(output).stem}-도형대조-{int(n)}쪽.png')
+            shutil.copyfile(sheet,target);saved.append(str(target))
+        except OSError:continue
+    return saved
 
 def uncertain_sheet(root,state,page):
     """Enlarged source crops of every spot inspected for this page, labelled by question and spot ID."""
@@ -720,24 +1144,92 @@ def uncertain_sheet(root,state,page):
         return montage(tiles,shared._fresh(root,'.png')) if tiles else None
     except (OSError,ValueError,KeyError):return None  # optional aid
 
-def write_task(root,page,include_answers):
+TILE_GRID=(2,3)      # columns, rows: the two exam columns, each in three parts
+TILE_OVERLAP=.08     # a symbol on a cut line is whole in one of the two tiles
+
+def source_tiles_enabled():
+    return os.environ.get('HWP_SOURCE_TILES','1').strip().lower() not in ('0','false','off','no')
+
+def source_tiles(root,page):
+    """The page cut into 2x3 overlapping tiles at source pixels, as [{'name','path','box'}] in reading order
+    (left column top to bottom, then the right column). A whole page is downscaled to one image by the host,
+    which hides overlines, arcs and primes; a tile is shown about 2.5 times larger at no extra call."""
+    if not source_tiles_enabled():return []
+    from PIL import Image
+    folder=Path(root)/'pages'/f'page-{page:04d}-tiles';names=('위','가운데','아래');rows=[]
+    with Image.open(shared._source(root,page)) as full:
+        columns,lines=TILE_GRID;w,h=full.width/columns,full.height/lines
+        for c in range(columns):
+            for r in range(lines):
+                box=(max(0,round(c*w-w*TILE_OVERLAP)),max(0,round(r*h-h*TILE_OVERLAP)),
+                     min(full.width,round((c+1)*w+w*TILE_OVERLAP)),min(full.height,round((r+1)*h+h*TILE_OVERLAP)))
+                path=folder/f'tile-{c*lines+r+1}.png'
+                if not path.is_file():
+                    folder.mkdir(parents=True,exist_ok=True);full.crop(box).save(path)
+                rows.append({'name':('왼쪽 ' if c==0 else '오른쪽 ')+names[r],'path':str(path),'box':list(box)})
+    return rows
+
+FIGURE_LINE=re.compile(r'\s*(?:>\s*)?!\[[^\]]*\]\(figure:[^)\s]*\)\s*')
+
+def figures_wanted(root):
+    """False for a text-only job (hwp_prepare include_figures=false): figures of the source are not restored."""
+    return bool(job._manifest(root).get('include_figures',True))
+
+def without_figures(text):
+    """A text-only job's Markdown without figure places, line numbers kept; a box that held only a figure goes
+    with it. Returns (text, removed line count): a producer who wrote a place by habit loses no round."""
+    lines=text.split('\n');removed={i for i,line in enumerate(lines) if FIGURE_LINE.fullmatch(line)}
+    for i in removed:lines[i]=''
+    i=0
+    while removed and i<len(lines):
+        if re.fullmatch(r'::: box(?: .*)?',lines[i].strip()):
+            end=next((j for j in range(i+1,len(lines)) if lines[j].strip().startswith(':::')),None)
+            if end is None:break
+            if lines[end].strip()==':::' and removed&set(range(i,end)) and not any(l.strip() for l in lines[i+1:end]):lines[i]=lines[end]=''
+            i=end
+        i+=1
+    return '\n'.join(lines),len(removed)
+
+def format_reference(figures=True):
+    """references/markdown-format.md; for a text-only job without its lines about figure places."""
+    text=(shared.SKILL/'references/markdown-format.md').read_text(encoding='utf-8')
+    if figures:return text
+    kept=[]
+    for line in text.split('\n'):
+        if '::: box' in line:
+            line=re.sub(r'과 독립 줄 도형 표시\(`[^`]*`\)','',line).replace(' 원본 보기상자 안의 그림은 상자 안에 둔다.','')
+        if 'figure:' in line or line.startswith(('- 도형은 ','- **선지가 그림인')):continue
+        kept.append(line)
+    return '\n'.join(kept)
+
+def write_task(root,page,include_answers,include_figures=True):
     """Write the producer task once. It carries no worker ID, so it can exist before spawning."""
     folder=root/'workers'/f'page-{page:04d}';folder.mkdir(parents=True,exist_ok=True)
     task=folder/'task.md'
     if task.is_file():return task
     source=info(root,page)
     from restoration_author_help import task_contract,tool_examples
+    try:tiles=source_tiles(root,page)
+    except (OSError,ValueError):tiles=[]  # reading aid only
     head=(f'# {page}쪽 제작\n\njob: {root}\npage: {page}\n원본: {source["source_image"]}\n'
-          f'원본 크기(px): {source["source_size_px"]}\n저장: {folder}\n\n')
-    body=('원본 전체를 한 번 읽고 아래 형식으로 reading.md에 문제를 작성하세요. 도형 TeX는 제출이 ready_for_figures를 돌려준 뒤 작성하세요. '
-          '불명확한 곳만 문항 ID·원본 픽셀 bbox·사유로 hwp_inspect 확대 요청하세요. 제출 전에도 가능합니다. '
-          '도형 규칙은 그 제출 응답의 figure_rules로 옵니다. 규칙 파일을 따로 열지 않습니다. '
+          f'원본 크기(px): {source["source_size_px"]}\n저장: {folder}\n'
+          +('확대 조각(같은 쪽을 원본 픽셀 크기로 자른 6장. 원본과 함께 **한 턴에** 연다. 괄호는 원본에서의 왼쪽·위·오른쪽·아래 픽셀):\n'
+            +''.join(f'- {t["name"]}: {t["path"]} ({t["box"][0]},{t["box"][1]},{t["box"][2]},{t["box"][3]})\n' for t in tiles) if tiles else '')+'\n')
+    tex='도형 TeX는 제출이 ready_for_figures를 돌려준 뒤 작성하세요. ' if include_figures else ''
+    body=(('원본과 확대 조각 6장을 한 턴에 함께 열어 읽고 아래 형식으로 reading.md에 문제를 작성하세요. 쪽 전체 이미지는 단·순서·배치를, '
+           '조각은 윗줄·호·첨자·프라임·작은 숫자 같은 세부를 읽는 데 씁니다. 좌표(bbox)는 언제나 원본 전체 기준입니다(조각에서 본 위치에 그 조각의 왼쪽·위 값을 더하면 정확합니다). '
+           +tex+
+           '조각으로도 읽히지 않는 곳만 문항 ID·원본 픽셀 bbox·사유로 hwp_inspect 확대 요청하세요. ' if tiles else
+           '원본 전체를 한 번 읽고 아래 형식으로 reading.md에 문제를 작성하세요. '+tex+
+           '불명확한 곳만 문항 ID·원본 픽셀 bbox·사유로 hwp_inspect 확대 요청하세요. 제출 전에도 가능합니다. ')+
+          ('도형 규칙은 그 제출 응답의 figure_rules로 옵니다. 규칙 파일을 따로 열지 않습니다. ' if include_figures else '')+
           '이 쪽의 배정 자리는 준비되어 있습니다. hwp_assign은 메인만 호출합니다.\n'
-          '이 역할 지침을 따라 자기 쪽 제출·도형 대조까지 MCP로 직접 완료하세요: '
+          +('이 역할 지침을 따라 자기 쪽 제출·도형 대조까지 MCP로 직접 완료하세요: ' if include_figures else
+            '이 역할 지침을 따라 자기 쪽 제출을 MCP로 직접 완료하세요(역할 지침의 도형 단계는 이 작업에 없습니다): ')+
           f'{shared.SKILL / "agents/hwp-restoration-reader.md"}. '
           'accepted 전에는 완료 보고하지 마세요. 이미 본 원본은 재열지 않고, 수정은 부분 변경만 하며, 빌드·최종 검수는 메인이 맡습니다.\n\n')
-    text=(head+task_contract(root,page,include_answers)+tool_examples(root,page)+body
-          +(shared.SKILL/'references/markdown-format.md').read_text(encoding='utf-8')
+    text=(head+task_contract(root,page,include_answers,include_figures)+tool_examples(root,page,include_figures)+body
+          +format_reference(include_figures)
           +('\n\n'+(shared.SKILL/'references/answer-sheet.md').read_text(encoding='utf-8') if include_answers else ''))
     task.write_text(text,encoding='utf-8')
     return task
@@ -748,6 +1240,7 @@ def perform(action,p,root,state):
             m=job._manifest(root)
             if job.digest(p['source'])!=m['source']['sha256']:raise ValueError('prepared_source_mismatch')
         else:m=job.prepare(Path(p['source']),root,dpi=p.get('dpi'),workflow='single-review/1')
+        state['source_dir']=str(Path(p['source']).resolve().parent)
         selected=p.get('question_pages',m.get('question_pages'))
         if selected is None:
             from PIL import Image,ImageDraw
@@ -786,13 +1279,15 @@ def perform(action,p,root,state):
                     'next_action':'Do not spawn duplicate workers. Rewind does not undo saved assignments. For an explicit restart after stopping old workers, call hwp_prepare with restart_job and the same source/question_pages; then use the returned job path. For continuation, keep the existing job and its workers. Do not delete old files or search configuration/logs.'}
         m['question_pages']=selected
         m['include_answers']=bool(p.get('include_answers',m.get('include_answers',False)))
+        # Text-only job when the user asked for no figures: the default restores them.
+        m['include_figures']=bool(p.get('include_figures',m.get('include_figures',True)))
         job.save_json(root/'manifest.json',m)
         for n in selected:(root/'workers'/f'page-{n:04d}'/'task.md').unlink(missing_ok=True)  # options may have changed before any assignment
-        tasks={n:write_task(root,n,m['include_answers']) for n in selected}
+        tasks={n:write_task(root,n,m['include_answers'],m['include_figures']) for n in selected}
         open_slots(root,selected)
         return {'status':'prepared','job':str(root),'page_count':len(selected),
-                'spawn_requests':[{'page':n,'output_page':i,'role':'producer','type':'self','task_path':str(tasks[n])} for i,n in enumerate(selected,1)],
-                'next_action':'Spawn one fresh producer subagent per selected page with its task_path and the role file path in the first prompt; it starts at once and finishes its page. Bind each actual returned ID with its unmodified spawn/task response in one hwp_assign items call: right after spawning, or when a blocking host returns the finished producer. Producers never call hwp_assign. Build requires every page bound; layout is automatic.'}
+                'spawn_requests':[{'page':n,'output_page':i,'role':'producer','type':subagent_type('hwp-restoration-reader'),'task_path':str(tasks[n])} for i,n in enumerate(selected,1)],
+                'next_action':'Spawn one fresh producer subagent per selected page (Antigravity TypeName = its type) with its task_path and the role file path in the first prompt; it starts at once and finishes its page.Bind each actual returned ID with its unmodified spawn/task response in one hwp_assign items call: right after spawning, or when a blocking host returns the finished producer. Producers never call hwp_assign. Build requires every page bound; layout is automatic.'}
     if action=='assign':
         m=job._manifest(root)
         if not m.get('question_pages') or page not in m['question_pages']:raise ValueError('select_question_pages_before_assignment')
@@ -806,7 +1301,7 @@ def perform(action,p,root,state):
             if p['worker_id'] in {agent(a) for a in m['assignments']}:raise ValueError('one_page_per_independent_worker')
             previous.update(agent_id=p['worker_id'],evidence=job._snapshot(root,'evidence',p['evidence'].encode('utf-8'),'.log'))
             previous.pop('pending');job.save_json(root/'manifest.json',m)
-            task=write_task(root,page,m.get('include_answers',False))
+            task=write_task(root,page,m.get('include_answers',False),m.get('include_figures',True))
             s=state['pages'].get(str(page),{})
             done=bool(s.get('composed') and s.get('composed_inputs')==composition_inputs(state,page))
             return {'status':'assigned','worker_id':p['worker_id'],'page':page,'page_status':'accepted' if done else 'in_progress',
@@ -816,7 +1311,7 @@ def perform(action,p,root,state):
             if (agent(previous)!=p['worker_id']
                     or job._artifact(root,previous['evidence']).read_bytes()!=p['evidence'].encode('utf-8')):
                 raise ValueError('page_already_assigned_to_different_worker_or_evidence')
-            task=write_task(root,page,m.get('include_answers',False))
+            task=write_task(root,page,m.get('include_answers',False),m.get('include_figures',True))
             return {'status':'assigned','unchanged':True,'worker_id':p['worker_id'],'page':page,
                     **info(root,page),'worker_instructions':str(task),'markdown_path':str(task.with_name('reading.md')),
                     'next_action':'Keep this existing worker and its task. Do not create a duplicate worker or repeat completed work.'}
@@ -825,13 +1320,14 @@ def perform(action,p,root,state):
         if a.get('workflow')!='single-review/1':
             m=job._manifest(root);next(x for x in m['assignments'] if x['page']==page)['workflow']='single-review/1';job.save_json(root/'manifest.json',m)
         folder=root/'workers'/f'page-{page:04d}'
-        task=write_task(root,page,m.get('include_answers',False));source=info(root,page)
+        task=write_task(root,page,m.get('include_answers',False),m.get('include_figures',True));source=info(root,page)
         return {'status':'assigned','worker_id':p['worker_id'],'page':page,**source,'worker_instructions':str(task),
                 'markdown_path':str(folder/'reading.md'),'next_action':'Binding recorded. The producer already has this task (sent at spawn); send it only if the spawn prompt omitted it. Main waits for accepted; no relaying or content reads.'}
     if action=='submit_reading':
         a=assignment(root,page);m=job._manifest(root)
         s=state['pages'].setdefault(str(page),{});s['errors']=['submission_pending']
         text=text_input(root,page,p,'markdown','markdown_path','reading.md')
+        if not m.get('include_figures',True):text,_=without_figures(text)
         from restoration_submission import validate_submission,SubmissionError,body_equation_source_map
         answer_errors=[];answer_rows=[]
         try:
@@ -877,7 +1373,7 @@ def perform(action,p,root,state):
             if s.get('composed') and s.get('composed_inputs')==composition_inputs(state,page):return {'status':'accepted','page':page,'unchanged':True}
             return accept_ready(root,state,page)
         ref=job._snapshot(root,'mcp/evidence',json.dumps(value,ensure_ascii=False).encode(),'.json')
-        job._snapshot(root,'mcp/evidence',text.encode(),'.md')
+        s['reading_md']=job._snapshot(root,'mcp/evidence',text.encode(),'.md')
         s.update(reading=ref);s.pop('composed',None);s.pop('composed_inputs',None);invalidate_output(state)
         if state['figures'].get(str(page),{}).get('context')!=figure_context(value): state['figures'].pop(str(page),None)
         return accept_ready(root,state,page)
@@ -925,10 +1421,15 @@ def perform(action,p,root,state):
         else:shown=crops
         return {'status':'ready_to_inspect',**source,'target':target,'image_paths':shown,**extra,
                 'next_action':'Forward image_paths to the requesting producer/reviewer, who opens them once. Multiple crops arrive as one labelled sheet at native pixel size. Master does not open them. Inspect only that uncertainty; no whole-exam crops.'}
+    if action in ('render_figures','review_figures') and not figures_wanted(root):
+        return {'status':'failed','action':action,'error_kind':'input','message':'figures_not_restored_in_this_job',
+                'next_action':'This job restores text only (include_figures=false). Write no figure TeX and call no figure tool: '
+                              'submit reading.md and report accepted.'}
     if action=='render_figures':
+        began=time.monotonic()
         value=reading(root,state,page);context=figure_context(value)
         expected={(q['id'],f) for q in value['questions'] for f in _figure_ids(q)};rows=[];input_sources={}
-        tex_paths={};bboxes={};lint={};refits={}
+        tex_paths={};bboxes={};lint={};refits={};originals={}
         figures=p.get('figures')
         last=[path for path,ref in state['batches'].items() if ref['page']==page]
         boxes=state.get('figure_sources',{}).get(str(page),{})
@@ -960,6 +1461,7 @@ def perform(action,p,root,state):
                 target.write_text(f['latex'],encoding='utf-8');f={**{k:v for k,v in f.items() if k!='latex'},'latex_path':str(target)}
             original,source=text_input(root,page,f,'latex','latex_path',f['id']+'.tex',with_source=True)
             if source is not None:tex_paths[f['id']]=source['path']
+            originals[f['id']]=original
             try:
                 from restoration_figure_lint import figure_warnings
                 from restoration_tikz_templates import expand_templates
@@ -972,6 +1474,9 @@ def perform(action,p,root,state):
             # A figure whose labels collided when fully fitted is rendered with the floor directly next time,
             # and one whose crossed labels were moved keeps its shift table: unchanged TeX renders once.
             mark=hashlib.sha256(original.encode('utf-8')).hexdigest()[:16]+f":{f['width_mm']}";memo=f"{page}/{f['id']}"
+            edits=state.setdefault('figure_edits',{});seen=edits.get(memo)
+            if seen is None:edits[memo]={'mark':mark,'count':0}
+            elif seen['mark']!=mark:edits[memo]={'mark':mark,'count':seen['count']+1}
             floor=FIT_MIN_SCALE if state.get('fit_crowded',{}).get(memo)==mark else FIT_FREE_SCALE
             placed=state.get('label_shifts',{}).get(memo,{})
             shifts={int(n):tuple(v) for n,v in placed['shifts'].items()} if placed.get('mark')==f'{mark}:{floor}' else None
@@ -1004,9 +1509,12 @@ def perform(action,p,root,state):
             return diagram_document(original,width,floor,shifts) if shifts else None
         result=batch.prepare_figures(root,page,rows,out,reuse_batch=prior[-1] if prior else None,refit=refit)
         state['batches'][result['batch']]={'page':page,'context':context,'input_sources':input_sources}
-        measured_slips(state,page,result['items'],lint)
+        locate_figures(root,state,page,result['items'],began)
+        measured_slips(state,page,result['items'],lint,originals)
         crossed_label_warnings(state,page,result['items'],lint)
         relation_slips(state,page,result['items'],lint)
+        length_line_slips(state,page,result['items'],lint)
+        source_line_slips(root,state,page,result['items'],lint,began)
         reviews=[];tasks=[];reused=[]
         for item in result['items']:
             if item['status']=='failed':continue
@@ -1027,28 +1535,38 @@ def perform(action,p,root,state):
                     from PIL import Image
                     from restoration_montage import side_by_side
                     with Image.open(task['source_image']) as full:
-                        l,t=max(0,math.floor(box[0])),max(0,math.floor(box[1]))
-                        r,b=min(full.width,math.ceil(box[0]+box[2])),min(full.height,math.ceil(box[1]+box[3]))
-                        if r-l<8 or b-t<8:raise ValueError('source_bbox_px_too_small_or_outside_page')
-                        crop=Path(item['png']).with_name(item['id']+'-source-crop.png');full.crop((l,t,r,b)).save(crop)
-                    ratio_slip(state,page,item,crop,lint)
+                        area=source_area(state,page,item['id'],full,box)
+                        if area is None:raise ValueError('source_bbox_px_too_small_or_outside_page')
+                        crop=Path(item['png']).with_name(item['id']+'-source-crop.png');full.crop(area).save(crop)
+                        # The ratio check keeps the producer's box: in a crop cut close to the figure a pencil arc
+                        # that touches it no longer runs into the edge, and the joined shape was measured (3 false warnings in 171).
+                        wide=grown_box(full,box);measured=crop
+                        if wide and wide!=area and not state.get('ratio_rounds',{}).get(f"{page}/{item['id']}"):
+                            measured=Path(item['png']).with_name(item['id']+'-source-box.png');full.crop(wide).save(measured)
+                    ratio_slip(state,page,item,measured,lint)
                     if lint.get(item['id']):task['warnings']=lint[item['id']]
-                    task['compare_image']=shared._register(state,side_by_side(crop,item['png'],Path(item['png']).with_name(item['id']+'-compare.png'),label_left='source '+item['id'],label_right='render'))
+                    task['compare_image']=shared._register(state,side_by_side(crop,item['png'],Path(item['png']).with_name(item['id']+'-compare.png'),label_left='source '+item['id'],label_right='render',min_height=COMPARE_MIN_HEIGHT))
                 except (ValueError,OSError) as exc:task['compare_image_error']=str(exc)
             tasks.append(task)
+        brief_repeats({t['id']:t['warnings'] for t in tasks if t.get('warnings')})
+        # A warning travels once: on its figure's task. Only figures without a task (already approved) are listed apart.
+        apart={k:v for k,v in lint.items() if k not in {t['id'] for t in tasks}}
         saved=job.load_json(result['batch']);saved['items']=result['items'];job.save_json(result['batch'],saved)
         sheets=compare_sheets([(t['id'],t['compare_image']) for t in tasks if t.get('compare_image')],out/'compare-sheet')
         # Warn before the build: stacked figures past this share of a question slot pushed a page over in a real run.
-        crowded=[{**r,'fix':'draw side-by-side source panels as one figure or lower width_mm; figures stack vertically in the slot'}
+        crowded=[{**r,'fix':'if the source shows these panels side by side, draw them as one figure (figures stack vertically in the slot). Keep width_mm at the printed size: the engine gives a tall question more rows'}
                  for r in page_figure_load(root,page,value,[i for i in result['items'] if i['status']!='failed']) if r['share']>=STACK_WARNING_SHARE]
+        limited=[t['id'] for t in tasks if state.get('figure_edits',{}).get(f"{page}/{t['id']}",{}).get('count',0)>=FIGURE_FIX_LIMIT]
         response={'status':result['status'],'batch_path':result['batch'],'errors':result['errors'],
                   'reviews':reviews,'review_tasks':tasks,'reused_review_ids':reused,'tex_paths':tex_paths,
+                  **({'fix_limit_reached':limited,'fix_limit_note':f'이 도형은 이미 {FIGURE_FIX_LIMIT}번 고쳤습니다. 더 고치지 않습니다. 현재 렌더로 판정을 제출하세요: '
+                      '원본과 다른 점이 남았으면 status=failed와 issues에 그 차이를 적습니다. 엔진이 그 차이를 검수 노트로 넘기고 쪽을 통과시킵니다.'} if limited else {}),
                   **({'compare_sheets':[shared._register(state,x) for x in sheets]} if sheets else {}),
                   **({'width_clamped':clamped} if clamped else {}),**({'kept_from_last_render':added} if added else {}),
-                  **({'figure_warnings':lint} if lint else {}),
+                  **({'figure_warnings':apart} if apart else {}),
                   **({'layout_warnings':crowded} if crowded else {}),
                   'next_action':('Send failed IDs and exact errors to the same producer. Fix only TeX/compile errors, then rerender the full current page figure list. For engine, missing-file or integrity errors, report the blocker; do not blindly edit TeX or retry.' if result['errors'] else
-                                 'Send only pending review_tasks to the same producer. If compare_sheets is present, open those sheets once (each row: source crop left, render right); else where a task has compare_image, open only that one image; otherwise compare with the original already visible in that context and reopen only if unavailable/unclear. To fix a figure, edit its tex_paths file and resubmit the full list with latex_path. Submit reviews with this current batch_path; every pending ID needs all four checks exactly passed/failed/not_verified. Explanations are not check values; put observed problems only in issues and keep issues=[] for passed. Unchanged approved figures need no reread.')}
+                                 'Send only pending review_tasks to the same producer. A figure passes when its points, connections, labels and marks match the source: do not render again to nudge coordinates, angles, proportions or source_bbox_px. If compare_sheets is present, open those sheets once (each row: source crop left, render right); else where a task has compare_image, open only that one image; otherwise compare with the original already visible in that context and reopen only if unavailable/unclear. To fix a figure, edit its tex_paths file and resubmit the full list with latex_path. Submit reviews with this current batch_path; every pending ID needs all four checks exactly passed/failed/not_verified. Explanations are not check values; put observed problems only in issues and keep issues=[] for passed. Unchanged approved figures need no reread.')}
         if not tasks and not result['errors']:
             response.update(perform('review_figures',{'page':page,'batch_path':result['batch'],'reviews':[]},root,state))
         return response
@@ -1068,6 +1586,10 @@ def perform(action,p,root,state):
                     'changed_ids':changed_ids,'visual_status':'not_verified',
                     'next_action':'The producer edited TeX after this render. Do not review or inspect this old batch. Call hwp_render_figures with the complete current figure list for this page; unchanged figures are reused automatically. Compare only the new pending renders, then submit their review.'}
         b=job.load_json(path)
+        late=late_measurements(root,state,page,b['items'])
+        if late:
+            return {'status':'failed','message':'measured_on_source_after_render','figure_warnings':late,'visual_status':'not_verified',
+                    'next_action':'The render call ended before the engine had read these figures on the source page. Fix the TeX of the listed figures as each warning says, call hwp_render_figures again, then submit the review.'}
         ids={i['id'] for i in b['items']};required={i['id'] for i in b['items'] if not i.get('review_evidence')}
         from figure_provenance import review_input_errors,review_input_failure,REVIEW_INPUT_HELP
         errors=review_input_errors(p.get('reviews'))
@@ -1090,6 +1612,15 @@ def perform(action,p,root,state):
                 cache.pop(key,None)
                 r=reviews[item['id']];data=job.load_json(item['review'])
                 data.update({k:r[k] for k in ('status','checks','issues')})
+                unfinished=state.setdefault('unfinished_notes',{}).setdefault(str(page),{})
+                unfinished.pop(item['id'],None)
+                if data['status']=='failed' and state.get('figure_edits',{}).get(f"{page}/{item['id']}",{}).get('count',0)>=FIGURE_FIX_LIMIT:
+                    # The fix limit is reached: the figure goes in as drawn and its remaining differences are
+                    # listed for the human checker, with the producer's own verdict kept in the record.
+                    data['fix_limit']={'reported_status':'failed','reported_checks':dict(r['checks']),'issues':list(r['issues'])}
+                    data.update(status='passed',issues=[],checks={k:'passed' for k in r['checks']})
+                    more=f" 외 {len(r['issues'])-1}건" if len(r['issues'])>1 else ''
+                    unfinished[item['id']]=[f"도형: {item['question_id']} 재현 미완 — {r['issues'][0][:120]}{more}"]
                 ref=job._snapshot(root,'mcp/evidence',json.dumps(data,ensure_ascii=False).encode(),'.json')
                 item['review']=str(job._artifact(root,ref))
                 if data['status']=='passed':
@@ -1168,7 +1699,10 @@ def perform(action,p,root,state):
                     and not owned_session_gone(receipt.parent)):
                 return {'status':'failed','message':'native_cleanup_unconfirmed','log':state['native_run'].get('log'),
                         'next_action':'Report the previous export failure. Do not retry or use direct Hangul/CLI; the owned session must be resolved by service maintenance first.'}
-        p={**p,'output':str(unused_output(p['output']))}
+        if not p.get('_refit'):
+            state['refit_rounds']=0
+            state['build_params']={k:p[k] for k in ('output','title','school','year','exam_title') if k in p}
+        p={**p,'output':str(unused_output(p['output'],state.get('source_dir')))}
         result=shared._perform('build',{**p,'native':False},root,state)
         state.pop('native_run',None);state.pop('output_stale',None)
         if not p.get('native',True):return result
@@ -1194,9 +1728,53 @@ def perform(action,p,root,state):
                 'output_status':'needs_rebuild' if state.get('output_stale') else 'not_built' if not state.get('native_run') else 'available',
                 'next_action':'Continue only missing page work; accepted pages need no recomposition. Build after all are accepted. No comparison or approval.'}
     if action=='read_asset':return shared._perform(action,p,root,state)
+    if action=='submit_review':
+        current=collect_native(root,state)
+        if not current or current['status']!='pending_review':raise ValueError('pending_review_output_required: nothing is waiting for review')
+        rows=p['reviews'];pending=[t['page'] for t in current['review_tasks']]
+        problems=[]
+        if sorted(r['page'] for r in rows)!=sorted(pending):
+            problems.append({'field':'page','expected':f'each of {pending} exactly once','received':[r['page'] for r in rows]})
+        for r in rows:
+            issues=r.get('issues')
+            if not isinstance(issues,list) or any(not isinstance(i,str) or not i.strip() for i in issues):
+                problems.append({'page':r['page'],'field':'issues','expected':'array of nonempty strings'});continue
+            if (r['status']=='passed')!=(not issues):
+                problems.append({'page':r['page'],'field':'status','expected':'passed has no issues; other verdicts list their issues'})
+            for i in issues:
+                if issue_tag(i) is None:
+                    problems.append({'page':r['page'],'field':'issues','received':i[:80],
+                                     'expected':'start with one tag: '+'/'.join(REPAIR_TAGS)+' (repair) or '+'/'.join(NOTE_TAGS)+' (note)'})
+        if problems:
+            return {'status':'failed','message':'invalid_review_submission','corrections':problems[:12],
+                    'next_action':'Correct only the reported fields and call hwp_submit_review again. No image needs to be reopened.'}
+        report=Path(current['report_path']);number=state.get('review_round',0)+1
+        text=report.read_text(encoding='utf-8') if report.is_file() else f'# 최종 검수 보고 {report.stem}\n\njob: {root}\n'
+        filled=[];page=None;byid={r['page']:r for r in rows}
+        for line in text.splitlines():
+            m=re.match(r'## page (\d+)',line)
+            if m:page=int(m.group(1))
+            r=byid.get(page)
+            if r and line.startswith('- 판정:'):line=f"- 판정: {r['status']}"
+            elif r and line.startswith('- issues:'):line='- issues:'+(''.join('\n  - '+i for i in r['issues']) if r['issues'] else ' 없음')
+            elif r and r.get('record') and line.startswith('- 선택지 행:'):line='- 선택지 행·도형 기록: '+r['record'].replace('\n',' / ')
+            filled.append(line)
+        report.parent.mkdir(parents=True,exist_ok=True);report.write_text('\n'.join(filled)+'\n',encoding='utf-8')
+        state['review_submission']={'round':number,'report':str(report),
+                                    'reviews':[{'page':r['page'],'status':r['status'],'issues':list(r['issues'])} for r in rows]}
+        judged=(lambda issues:text_only_review(issues)[0]) if not figures_wanted(root) else (lambda issues:issues)
+        return {'status':'review_recorded','round':number,'report_path':str(report),
+                'verdicts':[{'page':r['page'],'verdict':verdict(judged(r['issues']))} for r in rows],
+                'next_action':'Tell the main agent only: review submitted, and one line per page that is not passed. '
+                              'The main agent then calls hwp_finish_review(job, reviewer_id, spawn_evidence) without reviews.'}
     if action=='finish_review':
         current=collect_native(root,state)
         if not current or current['status'] not in ('pending_review','complete'):raise ValueError('current_native_output_required')
+        if p.get('reviews') is None:
+            sent=state.get('review_submission')
+            if not sent or sent.get('round')!=state.get('review_round',0)+1:
+                raise ValueError('no_review_submitted_for_this_round: the reviewer calls hwp_submit_review first, or pass reviews with review_evidence_path')
+            p={**p,'reviews':sent['reviews'],'review_evidence':Path(sent['report']).read_text(encoding='utf-8')}
         reviewer=p['reviewer_id'];owners={x for a in job._manifest(root)['assignments'] for x in (agent(a),a['worker_id']) if x}
         if not reviewer.strip() or reviewer in owners:raise ValueError('one_independent_reviewer_required_not_a_producer')
         if state.get('reviewer_id') not in (None,reviewer):raise ValueError('use_the_same_single_reviewer_for_this_job')
@@ -1211,7 +1789,10 @@ def perform(action,p,root,state):
             if (r['status'] not in ('passed','passed_with_notes','failed') or not isinstance(r['issues'],list)
                     or any(not isinstance(i,str) or not i.strip() for i in r['issues'])
                     or (r['status']=='passed')!=(not r['issues'])):raise ValueError('invalid_review_verdict: passed has no issues; other verdicts list tagged issues')
-            task=next(t for t in state['review_tasks'] if t['page']==r['page']);required.extend([task.get('source_image') or task['answer_reference'],task['output_image']]+([task['figure_sheet']] if task.get('figure_sheet') else []))
+            task=next(t for t in state['review_tasks'] if t['page']==r['page']);required.extend([task.get('source_image') or task['answer_reference']]
+                            # an answer table the engine compared is not read off its image (answer_table_check)
+                            +([] if (task.get('table_check') or {}).get('verified') else [task['output_image']])
+                            +([task['figure_sheet']] if task.get('figure_sheet') else []))
         missing=[x for x in required if x not in evidence]
         if missing:
             return {'status':'failed','message':'actual_reviewer_response_with_id_and_reviewed_paths_required',
@@ -1219,9 +1800,11 @@ def perform(action,p,root,state):
                     'next_action':'Ask the same reviewer to include the listed paths/ID in its actual response, then resubmit the existing verdicts. Do not fabricate evidence, reread images or rebuild solely to repair response formatting.'}
         ref=job._snapshot(root,'mcp/evidence',evidence.encode(),'.log');state['reviewer_id']=reviewer
         state['review_round']=state.get('review_round',0)+1
-        counts=state.setdefault('failed_verdicts',{})
+        counts=state.setdefault('failed_verdicts',{});text_only=not figures_wanted(root)
         for r in rows:
-            n=str(r['page']);status=verdict(r['issues']);issues=list(r['issues'])
+            n=str(r['page']);issues=list(r['issues'])
+            if text_only:issues,_=text_only_review(issues)  # figures are left out on purpose: not a finding
+            status=verdict(issues)
             if status=='failed':
                 counts[n]=counts.get(n,0)+1
                 if counts[n]>=max_failed_verdicts():
@@ -1232,7 +1815,7 @@ def perform(action,p,root,state):
                     'content_binding':state.get('review_content_bindings',{}).get(n),'reviewer_id':reviewer}
             task=next(t for t in state['review_tasks'] if t['page']==r['page'])
             if task.get('kind')=='answer_sheet':
-                assembled=[x for x in job.assemble(root) if x.get('role')!='review_notes'];answer_page=assembled[-1]
+                assembled=[x for x in job.assemble(root) if x.get('role') not in UNREVIEWED_ROLES];answer_page=assembled[-1]
                 record.update(answer_review_questions=answer_page['answer_review_questions'],
                               answer_output_sha256=job.digest(task['output_image']),
                               answer_output_position=next(i for i,p in enumerate(assembled,1)
@@ -1288,7 +1871,9 @@ def merge_state(current,base,mine):
     for key in set(base)|set(mine):
         if key not in mine:out.pop(key,None)
         elif key not in base or base[key]!=mine[key]:
-            out[key]=merge_state(current.get(key),base.get(key),mine[key]) if isinstance(base.get(key),dict) else deepcopy(mine[key])
+            # A table both calls created since the base (the first renders of two pages) is merged too, not replaced.
+            both_new=key not in base and isinstance(current.get(key),dict) and isinstance(mine[key],dict)
+            out[key]=merge_state(current.get(key),base.get(key,{}),mine[key]) if isinstance(base.get(key),dict) or both_new else deepcopy(mine[key])
     return out
 
 def _render_once(params,root,request_kind):
@@ -1312,7 +1897,7 @@ def _render_once(params,root,request_kind):
     return result
 
 def _render(params,root,request_kind):
-    """Renders of different pages run side by side; a call waits wait_seconds() at most. A render still running
+    """Renders of different pages run side by side; a call waits RENDER_WAIT_SECONDS at most. A render still running
     then is reported, and the next render call of that page waits for it and hands its result out."""
     key=(str(root),str(params.get('page')))
     with _RENDERS_LOCK:
@@ -1324,7 +1909,7 @@ def _render(params,root,request_kind):
                 except Exception as exc:run['result']=failure_result('render_figures',exc)
                 finally:run['done'].set()
             __import__('threading').Thread(target=work,daemon=True,name='render '+key[1]).start()
-    if not run['done'].wait(wait_seconds()):
+    if not run['done'].wait(wait_seconds(RENDER_WAIT_SECONDS)):
         return {'status':'rendering','page':params.get('page'),'next_action':'The render continues in the background (several pages are rendering at once). '
                 'Call hwp_render_figures for this page again, unchanged: it returns this render\'s result when it is ready. Do not edit the TeX files meanwhile.'}
     with _RENDERS_LOCK:
@@ -1361,7 +1946,20 @@ def dispatch(action,params,*,_request_kind='single'):
     result=_serial(action,params,root,started,_request_kind)
     if action in ('build','status') and isinstance(result,dict) and result.get('status')=='building' and params.get('items') is None:
         result=_await_export(root,result,started,_request_kind)
+    if action=='finish_review' and isinstance(result,dict) and result.get('status')=='notes_build_required':
+        result=_notes_build(root,result,started,_request_kind)
     return result
+
+def _notes_build(root,result,started,request_kind):
+    """All pages passed with notes: the build that adds the 검수 노트 page needs no decision, so it starts here with the
+    parameters of the last build and the main agent does not spend a call asking for it."""
+    try:params=job.load_json(root/'mcp/state.json').get('build_params')
+    except (ValueError,OSError):params=None
+    if not params:return result
+    built=_serial('build',{'job':str(root),**params},root,started,request_kind)
+    if isinstance(built,dict) and built.get('status')=='building':built=_await_export(root,built,started,request_kind)
+    if not isinstance(built,dict) or built.get('status') not in ('building','complete'):return result  # the caller builds, as before
+    return {**built,'review_notes':result.get('review_notes',[]),'notes_build':'started'}
 
 def _serial(action,params,root,started,_request_kind):
     with shared._MUTEX:

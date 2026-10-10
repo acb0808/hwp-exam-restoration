@@ -87,7 +87,7 @@ class LabelPositionTests(unittest.TestCase):
         self.assertEqual(label_warnings(tex), ['labels listed from the source but not drawn: 0'])
 
     def test_label_at_a_computed_position_counts_as_drawn(self):
-        # 광남중 q12: the position nests parentheses, and the label was reported as not drawn.
+        # 중학교 시험지 A q12: the position nests parentheses, and the label was reported as not drawn.
         tex = ('% width_mm=50 labels=A,47°,√10\n\\begin{tikzpicture}\\coordinate (A) at (0,0);\\node[left] at (A) {$A$};'
                '\\node[above right] at ($(A)+(0.55,0.25)$) {$47^\\circ$};'
                '\\node at ($(A)!0.5!(1,1)$) {$\\sqrt{10}$};\\end{tikzpicture}')

@@ -77,7 +77,9 @@ class AuthorHelpTests(unittest.TestCase):
         help_result = self.call('help', page=1, topic='equations')
         self.assertEqual(help_result['status'], 'help', help_result)
         examples = [x['latex'] for x in help_result['examples']]
-        text = '## left\n'+'\n'.join(f'### q{i}\n{i}. ${s}$' for i,s in enumerate(examples,1))
+        rows = [f'### q{i}\n{i}. ${s}$' for i,s in enumerate(examples,1)]
+        self.assertLessEqual(len(rows), 12)  # a page column holds six questions
+        text = '## left\n'+'\n'.join(rows[:6])+('\n## right\n'+'\n'.join(rows[6:]) if rows[6:] else '')
         submitted = self.call('submit_reading', page=1, markdown=text)
         self.assertEqual(submitted['status'], 'accepted', submitted)
 

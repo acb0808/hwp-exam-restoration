@@ -13,10 +13,69 @@
   \pic[draw,angle radius=2mm,#1] {right angle=#2--#3--#4};%
 }
 
-% Left bend relative to A->B; no arrowheads unless explicitly requested.
+% Side of A->B on which point #3 lies: \ExamSide is 1 on the left, -1 on the right (or on the line).
+\newcommand{\ExamSideOf}[3]{%
+  \path let \p1=(#1),\p2=(#2),\p3=(#3) in
+    \pgfextra{\pgfmathparse{((\x2-\x1)/100*(\y3-\y1)/100-(\y2-\y1)/100*(\x3-\x1)/100)>0.0001 ? 1 : -1}%
+      \xdef\ExamSide{\pgfmathresult}};%
+}
+
+% Side of A->B on which the figure lies, as \ExamSide (1 left, -1 right): the centre of the picture's named
+% points defined so far (\ExamPoints, listed by the engine). The bounding box alone cannot tell: its centre
+% lies on the hypotenuse of every right triangle. It is used only when fewer than three points are named or
+% their centre lies on the line AB.
+\providecommand{\ExamPoints}{}
+\makeatletter
+\newcommand{\ExamInnerSide}[2]{%
+  \gdef\exam@sx{0}\gdef\exam@sy{0}\gdef\exam@count{0}%
+  \@for\exam@p:=\ExamPoints\do{\pgfutil@ifundefined{pgf@sh@ns@\exam@p}{}{%
+    \path let \p1=(\exam@p) in \pgfextra{%
+      \pgfmathparse{\exam@sx+\x1/100}\xdef\exam@sx{\pgfmathresult}%
+      \pgfmathparse{\exam@sy+\y1/100}\xdef\exam@sy{\pgfmathresult}%
+      \pgfmathparse{\exam@count+1}\xdef\exam@count{\pgfmathresult}};}}%
+  \ExamSideOf{#1}{#2}{current bounding box.center}%
+  \ifdim\exam@count pt>2.5pt
+    \path let \p1=(#1),\p2=(#2) in \pgfextra{%
+      \pgfmathparse{(\x2-\x1)/100*(\exam@sy/\exam@count-\y1/100)-(\y2-\y1)/100*(\exam@sx/\exam@count-\x1/100)}%
+      \xdef\exam@cross{\pgfmathresult}%
+      \pgfmathparse{abs(\exam@cross)>0.03*(((\x2-\x1)/100)^2+((\y2-\y1)/100)^2) ? (\exam@cross>0 ? 1 : -1) : \ExamSide}%
+      \xdef\ExamSide{\pgfmathresult}};%
+  \fi
+}
+
+% Dashed length curve from A to B, bowed away from the figure (\ExamInnerSide), so the order of A and B does
+% not matter. [inside] bows into the figure; an explicit bend left/bend right is kept.
+% No arrowheads unless explicitly requested.
+\tikzset{inside/.style={}}
 \newcommand{\ExamLengthArc}[4][]{%
-  \draw[dashed,bend left=18,#1] (#2) to
+  \ExamInnerSide{#2}{#3}%
+  \pgfutil@in@{inside}{#1}%
+  \ifpgfutil@in@\pgfmathparse{-\ExamSide}\xdef\ExamSide{\pgfmathresult}\fi
+  \ifdim\ExamSide pt>0pt\def\ExamArcBend{bend right}\else\def\ExamArcBend{bend left}\fi
+  % Printed length arcs rise 0.12 of the length they span (25 source arcs read on the scans: quartiles 0.10,
+  % 0.12, 0.13; the fixed 18 degree bend rose 0.08), and a short one needs room for its label between arc
+  % and line: rise = max(0.12 of the span, 2.2mm), at most a 45 degree bend.
+  \path let \p1=($(#3)-(#2)$), \n1={veclen(\x1,\y1)} in
+    \pgfextra{\pgfmathparse{min(45,2*atan(2*max(0.12*\n1,6.3)/max(\n1,1)))}\xdef\ExamArcAngle{\pgfmathresult}};%
+  \draw[dashed,\ExamArcBend=\ExamArcAngle,#1] (#2) to
     node[midway,fill=white,inner sep=.6pt] {#4} (#3);%
+}
+\makeatother
+
+% Angle mark at vertex B between BA and BC, always the smaller angle whatever the order of A and C.
+% #5 is the printed label ({} for none); [double] doubles the arc, [angle radius=5mm] resizes it,
+% [angle eccentricity=.6] puts a mark such as $\bullet$ or $\times$ inside the arc.
+\newcommand{\ExamAngle}[5][]{%
+  \ExamSideOf{#3}{#2}{#4}%
+  % A narrow angle has no room for its label near the vertex: the label moves out along the angle.
+  \path let \p1=(#2),\p2=(#3),\p3=(#4) in
+    \pgfextra{\pgfmathparse{abs(mod(atan2(\y1-\y2,\x1-\x2)-atan2(\y3-\y2,\x3-\x2)+540,360)-180)}%
+      \pgfmathparse{min(4,max(1.7,0.5/tan(max(\pgfmathresult,2)/2)+0.3))}\xdef\ExamEccentricity{\pgfmathresult}};%
+  \ifdim\ExamSide pt>0pt
+    \pic[draw,angle radius=3.5mm,angle eccentricity=\ExamEccentricity,inner sep=1pt,"#5",#1] {angle=#2--#3--#4};%
+  \else
+    \pic[draw,angle radius=3.5mm,angle eccentricity=\ExamEccentricity,inner sep=1pt,"#5",#1] {angle=#4--#3--#2};%
+  \fi
 }
 
 % Explicit placement, not an automatic collision solver. Never hides lines.

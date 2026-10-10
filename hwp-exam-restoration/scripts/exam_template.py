@@ -50,7 +50,9 @@ def project_pages(pages,profile):
                             if key in b:b[key]*=sx
                         if 'tab_stops_mm' in b:b['tab_stops_mm']=[v*sx for v in b['tab_stops_mm']]
                         if 'figure' in b:
-                            f=b['figure'];f['size_mm']=[v*sx for v in f['size_mm']];f['offset_mm']=[v*sx for v in f['offset_mm']]
+                            # figure_scale: a figure shrunk by the engine so its question fits the page (restoration_refit).
+                            shrink=(source.get('figure_scale') or {}).get(q['id'],1)
+                            f=b['figure'];f['size_mm']=[v*sx*shrink for v in f['size_mm']];f['offset_mm']=[v*sx for v in f['offset_mm']]
                         if b['kind']=='box':
                             b['stroke_mm']=profile['box_stroke_mm']
                             b['padding_mm']=profile['box_padding_mm']

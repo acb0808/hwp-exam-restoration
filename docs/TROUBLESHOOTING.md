@@ -6,9 +6,12 @@
 | MCP가 도구 목록에 없음 | 사용 앱의 MCP 서버 연결을 새로고침하고 연결 상태를 확인합니다. |
 | OpenCode에서 서버가 없음 | `%USERPROFILE%\.config\opencode\opencode.json`의 `mcp.hwp-restoration` 항목과 실행 경로를 확인한 뒤 `opencode mcp list`를 실행합니다. JSONC 주석을 지우지 않습니다. |
 | Antigravity에서 서버가 없음 | `~/.gemini/config/mcp_config.json`에 등록됐는지, 앱에서 해당 서버를 다시 연결했는지 확인합니다. |
-| runtime_version이 2.7.9가 아님 | 제작을 시작하지 말고 MCP 서버 연결을 새로고침합니다. |
+| runtime_version이 2.8.0이 아님 | 제작을 시작하지 말고 MCP 서버 연결을 새로고침합니다. |
 | Python 또는 라이브러리 오류 | 전용 `.mcp-venv`와 `requirements-mcp.txt` 경로를 확인합니다. 전역 Python에는 설치하지 않습니다. |
+| OpenCode에서 출력이 `Request timed out`으로 끊김 | `opencode.json`의 `mcp.hwp-restoration` 항목에 `"timeout": 15000`이 있으면 그 줄을 지우고 OpenCode를 다시 시작합니다. |
 | 도형 렌더가 실패함 | TeX 실행 파일과 TikZ 설치 여부를 확인합니다. |
+| Windows 보안이 TeX 실행을 차단함 | “이 앱의 일부가 차단되었습니다” 알림이 뜨면 Smart App Control이 서명 없는 TeX 파일을 막은 것입니다. Windows 보안의 보호 기록에서 차단된 파일을 확인합니다. Smart App Control에는 프로그램별 예외가 없으므로, 끌지는 사용자가 직접 정합니다. 그림이 필요 없다면 텍스트만 복원하도록 요청할 수 있습니다. |
+| `existing_hwp_session`으로 출력이 안 됨 | 열려 있는 한글을 모두 닫고 다시 출력합니다. 창이 없는데도 같은 오류가 나오면 작업 관리자에서 남아 있는 `Hwp.exe`를 확인합니다. |
 | 한글 파일을 만들 수 없음 | 데스크톱 한컴오피스 한글과 필요한 보안 모듈·글꼴이 설치돼 있는지 확인합니다. 뷰어만으로는 만들 수 없습니다. |
 | 도중에 응답이 끝남 | 같은 작업 폴더를 유지하고 에이전트에게 해당 job의 재시작 안내를 따르도록 합니다. 새 job이 필요한 경우 기존 파일은 보존합니다. |
 | 권한 또는 보안 창이 나옴 | 요청된 작업과 필요한 권한을 확인합니다. 보호 기능을 통째로 끄지 않습니다. |

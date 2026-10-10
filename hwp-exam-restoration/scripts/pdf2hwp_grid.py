@@ -6,6 +6,24 @@ HC='{http://www.hancom.co.kr/hwpml/2011/core}'
 HH='{http://www.hancom.co.kr/hwpml/2011/head}'
 def mm(units):return units*25.4/7200
 
+def estimated_plan(questions,boundaries,prototypes,col,table,single):
+    """Rows per question of one column chosen from estimated heights, or None to keep the default split."""
+    try:
+        from restoration_preplan import content_height_mm,figures_height_mm,plan_rows
+        cells=[]
+        for q,start,end in zip(questions,boundaries,boundaries[1:]):
+            cell=prototypes[start,col]
+            width=(sum(int(prototypes[start,c].find(HP+'cellSz').get('width')) for row,c in prototypes if row==start) if single
+                   else int(cell.find(HP+'cellSz').get('width')))
+            margin=cell.find(HP+'cellMargin') if cell.get('hasMargin')=='1' else table.find(HP+'inMargin')
+            pad={k:int(margin.get(k,'0')) for k in ('left','right','top','bottom')}
+            height=sum(int(prototypes[r,col].find(HP+'cellSz').get('height')) for r in range(start,end))
+            cells.append({'block_id':q['id'],'rows':end-start,'cell_mm':mm(height),'available_mm':mm(height-pad['top']-pad['bottom']),
+                          'content_mm':content_height_mm(q['content'],q,mm(width-pad['left']-pad['right'])),
+                          'figures_mm':figures_height_mm(q['content'])})
+        return plan_rows(cells)
+    except (ImportError,KeyError,TypeError,ValueError,ZeroDivisionError):return None  # an aid: the measured refit still follows
+
 def build_grid_page(page,index,flow,root,profile,fields):
     if set(fields or {})!=set(profile['fields']):raise ValueError('template_fields_required')
     with zipfile.ZipFile(root/profile['source_package']) as z:source=E.fromstring(z.read('Contents/section0.xml'))
@@ -18,7 +36,7 @@ def build_grid_page(page,index,flow,root,profile,fields):
     if index==0:
         for key,spec in profile['fields'].items():
             value=fields[key]
-            if not isinstance(value,str) or not value.strip() or '\n' in value:raise ValueError('invalid_template_field')
+            if not isinstance(value,str) or not value.strip() or '\n' in value:raise ValueError('invalid_template_field: '+key+' must be non-empty one-line text (use a neutral value such as - when unknown)')
             nodes=[t for t in p.iter(HP+'t') if spec['source_text'] in (t.text or '')]
             if len(nodes)!=1:raise ValueError('template_field_ambiguous:'+key)
             nodes[0].text=nodes[0].text.replace(spec['source_text'],value)
@@ -28,13 +46,21 @@ def build_grid_page(page,index,flow,root,profile,fields):
         for c in list(row):
             addr=c.find(HP+'cellAddr');prototypes[(int(addr.get('rowAddr'))-row_offset,int(addr.get('colAddr')))]=copy.deepcopy(c)
             row.remove(c)
-    regions=sorted(page['regions'],key=lambda r:r['bbox_mm'][0]);records=[];merges=[]
+    regions=sorted(page['regions'],key=lambda r:r['bbox_mm'][0]);records=[];merges=[];preplanned=[]
     for column,region in enumerate(regions):
         col=(0 if column==0 else 2) if index==0 else column
         questions=sorted((q for q in page['questions'] if q['region_id']==region['id']),key=lambda q:q['bbox_mm'][1])
         n=len(questions)
         if not 1<=n<=6:raise ValueError('grid_column_requires_1_to_6_questions')
         boundaries=[(i*6)//n for i in range(n+1)]
+        # A measured plan (restoration_refit) gives a question that overflowed more of the six rows.
+        spans=[(page.get('row_plan') or {}).get(q['id']) for q in questions]
+        if all(type(s) is int and s>=1 for s in spans) and sum(spans)==6:boundaries=[sum(spans[:i]) for i in range(n+1)]
+        elif not page.get('role'):
+            # No measurement yet: a question that certainly overflows its default rows gets more of them now
+            # (restoration_preplan), instead of after an export that would only have measured the overflow.
+            planned=estimated_plan(questions,boundaries,prototypes,col,table,len(regions)==1)
+            if planned:boundaries=[sum(planned[:i]) for i in range(n+1)];preplanned.append(region['id'])
         for question,start,end in zip(questions,boundaries,boundaries[1:]):
             cell=copy.deepcopy(prototypes[start,col]);last=prototypes[end-1,col]
             cell.set('name',question['id']);cell.set('editable','1')
@@ -61,12 +87,12 @@ def build_grid_page(page,index,flow,root,profile,fields):
             usable=mm(width-pad['left']-pad['right'])
             sub=cell.find(HP+'subList');sub.clear();sub.attrib.update(textDirection='HORIZONTAL',lineWrap='BREAK',vertAlign='TOP',linkListIDRef='0',linkListNextIDRef='0',textWidth='0',textHeight='0',hasTextRef='0',hasNumRef='0',id='')
             before=len(flow.measurements)
-            if page.get('role')=='answer_sheet':
+            if page.get('role') in ('answer_sheet','answer_sheet_more'):
                 from restoration_answers import table_xml
-                content=table_xml(flow,question,page['answer_rows'],usable)
+                content=table_xml(flow,question,page['answer_rows'],usable,page.get('answer_part'))
             elif page.get('role')=='review_notes':
                 from restoration_answers import notes_table_xml
-                content=notes_table_xml(flow,question,page['note_rows'],usable)
+                content=notes_table_xml(flow,question,page['note_rows'],usable,page.get('note_part'))
             else:content=flow.contents(question['content'],question,usable)
             wrapped=E.fromstring('<root xmlns:hp="'+HP[1:-1]+'" xmlns:hc="'+HC[1:-1]+'">'+content+'</root>')
             sub.extend(list(wrapped));rows[row_offset+start].append(cell)
@@ -101,5 +127,6 @@ def build_grid_page(page,index,flow,root,profile,fields):
         for child in list(parent):
             if child.tag==HP+'linesegarray' and parent is p:parent.remove(child)
     records.insert(0,{'block_id':f'page-{page["page_number"]}-grid','kind':'page_grid','container_id':table_id,
-        'base_rows':6,'logical_columns':2,'height_mm':mm(int(table.find(HP+'sz').get('height'))),'merges':merges})
+        'base_rows':6,'logical_columns':2,'height_mm':mm(int(table.find(HP+'sz').get('height'))),'merges':merges,
+        **({'preplanned_columns':preplanned} if preplanned else {})})
     return E.tostring(p,encoding='unicode'),records

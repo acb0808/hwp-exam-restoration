@@ -43,7 +43,7 @@ class CircleTests(unittest.TestCase):
     def test_diameter_and_radius(self):
         self.assertEqual(keys(r'$\overline{AB}$를 지름으로 하는 반원 O'), ['center O', 'diameter A-B'])
         self.assertEqual(keys(r'$\overline{AB}$는 원 O의 지름이다.'), ['center O', 'diameter A-B'])
-        # 하안북중 2021: "반지름 OC" must not read as "지름 OC"
+        # 중학교 시험지 B 2021: "반지름 OC" must not read as "지름 OC"
         self.assertEqual(keys('원 O에서 반지름 OC의 길이는 5이다.'), ['center O', 'on_circle C'])
 
     def test_tangents(self):
@@ -97,7 +97,7 @@ class LineTests(unittest.TestCase):
         self.assertEqual(keys(r'$\angle A$의 이등분선과 $\overline{BC}$가 만나는 점을 D라 하자.'), ['on_line D B-C'])
         self.assertEqual(keys('세 점 B, C, D는 한 직선 위에 있다.'), ['collinear BCD'])
         self.assertEqual(keys(r'선분 AB의 수직이등분선 위의 한 점 P'), ['on_bisector P A-B'])
-        # 광명중 2024: C is folded onto D; only D is on AB
+        # 중학교 시험지 D 2024: C is folded onto D; only D is on AB
         self.assertEqual(keys(r'꼭짓점 C가 $\overline{AB}$ 위의 점 D에 오도록 접었다.'), ['on_segment D A-B'])
 
 
@@ -122,7 +122,7 @@ class LengthAndShapeTests(unittest.TestCase):
         self.assertEqual(keys(r'$\square ABCD$는 정사각형이고'), ['square ABCD'])
 
     def test_a_goal_is_not_a_given(self):
-        # 광문중 2025: both read as givens by an earlier version
+        # 중학교 시험지 E 2025: both read as givens by an earlier version
         self.assertEqual(keys(r'$\square ABCD$가 평행사변형이 되도록 하는 $\angle D$의 크기는?'), [])
         self.assertEqual(keys(r'$\square PBQD$가 마름모인 이유를 설명하시오.'), [])
 

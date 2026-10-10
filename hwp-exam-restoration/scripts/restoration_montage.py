@@ -13,6 +13,19 @@ PAD = 6
 MAX_WIDTH = 1400
 
 
+def label_font(*texts):
+    """A font that can print the labels, or None for Pillow's built-in ASCII font."""
+    if all(str(t).isascii() for t in texts):
+        return None
+    from PIL import ImageFont
+    for name in ('malgun.ttf', 'NanumGothic.ttf', 'AppleGothic.ttf', 'NotoSansCJK-Regular.ttc'):
+        try:
+            return ImageFont.truetype(name, 13)
+        except OSError:
+            continue
+    return None
+
+
 def montage(items, output, *, max_width=MAX_WIDTH):
     """items: [(label, image_path)]. Returns the output path; tiles are shelf-packed."""
     if not items:
@@ -48,18 +61,31 @@ def montage(items, output, *, max_width=MAX_WIDTH):
     return str(output)
 
 
-def side_by_side(source_crop, render, output, *, label_left='source', label_right='render', max_height=900):
-    """Source crop and rendered figure at the same height, for a single-view comparison."""
+def side_by_side(source_crop, render, output, *, label_left='source', label_right='render', max_height=900, min_height=0, white=False):
+    """Source crop and rendered figure at the same height, for a single-view comparison.
+    min_height: a small crop is enlarged to this height with its render, as far as the pair stays within MAX_WIDTH.
+    A crop cut close around a small figure would otherwise show its render at 250 pixels, marks and all.
+    white: a plain white sheet for print (검수 노트) instead of the grey working sheet."""
+    font = label_font(label_left, label_right)
+    if font is None and not (str(label_left).isascii() and str(label_right).isascii()):
+        label_left, label_right = 'source', 'output'
     with Image.open(source_crop) as a, Image.open(render) as b:
         a, b = a.convert('RGB'), b.convert('RGB')
         target = min(max_height, max(a.height, 1))
+        if target < min_height:
+            fits = int((MAX_WIDTH - 3 * PAD) / (a.width / a.height + b.width / b.height))
+            target = max(target, min(min_height, max_height, fits))
         if a.height != target:
             a = a.resize((max(1, round(a.width * target / a.height)), target), Image.LANCZOS)
-        b = b.resize((max(1, round(b.width * target / b.height)), target), Image.LANCZOS)
-        sheet = Image.new('RGB', (a.width + b.width + 3 * PAD, target + LABEL_H + 2 * PAD), '#f2f2f2')
+        wide = max(1, round(b.width * target / b.height))
+        # A render much wider than tall (a table of one row) is shown no wider than its source crop or the room left.
+        room = max(a.width, MAX_WIDTH - a.width - 3 * PAD)
+        b = b.resize((room, max(1, round(b.height * room / b.width))) if wide > room else (wide, target), Image.LANCZOS)
+        sheet = Image.new('RGB', (a.width + b.width + 3 * PAD, max(target, b.height) + LABEL_H + 2 * PAD), 'white' if white else '#f2f2f2')
         draw = ImageDraw.Draw(sheet)
-        draw.text((PAD, PAD), label_left, fill='#c00000')
-        draw.text((a.width + 2 * PAD, PAD), label_right, fill='#c00000')
+        ink = '#404040' if white else '#c00000'
+        draw.text((PAD, PAD - 2 if font else PAD), label_left, fill=ink, font=font)
+        draw.text((a.width + 2 * PAD, PAD - 2 if font else PAD), label_right, fill=ink, font=font)
         sheet.paste(a, (PAD, PAD + LABEL_H))
         sheet.paste(b, (a.width + 2 * PAD, PAD + LABEL_H))
     output = Path(output)

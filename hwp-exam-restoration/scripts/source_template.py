@@ -10,7 +10,8 @@ def preserve_source_shell(candidate,template_root,profile,fields):
         raise ValueError('source_template_hash_mismatch')
     fields=fields or {}
     if set(fields)!=set(profile['fields']):raise ValueError('template_fields_required:'+','.join(profile['fields']))
-    if any(not isinstance(v,str) or not v.strip() or '\n' in v for v in fields.values()):raise ValueError('invalid_template_field')
+    bad=[k for k,v in fields.items() if not isinstance(v,str) or not v.strip() or '\n' in v]
+    if bad:raise ValueError('invalid_template_field: '+','.join(bad)+' must be non-empty one-line text (use a neutral value such as - when unknown)')
     with zipfile.ZipFile(source) as z:original={n:z.read(n) for n in z.namelist()}
     with zipfile.ZipFile(candidate) as z:generated={n:z.read(n) for n in z.namelist()}
     source_root=E.fromstring(original['Contents/section0.xml'])

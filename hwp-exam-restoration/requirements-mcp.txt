@@ -13,6 +13,7 @@ idna==3.20
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 mcp==1.30.0
+numpy==2.5.1
 pillow==12.2.0
 psutil==7.2.2
 pycparser==3.0

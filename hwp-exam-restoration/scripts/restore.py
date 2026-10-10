@@ -228,13 +228,18 @@ def main(argv=None):
         result['pages_sha256'] = expected
         result['expected_source_pages'] = len(pages)
         result['visual_status'] = 'not_verified'
-        if result.get('status') == 'rendered' and result.get('page_count') != len(pages):
-            result.update(status='failed', error='native_page_count_differs_from_source')
         if result.get('status') == 'rendered':
             from restoration_fit import check_native_fit
-            result['content_fit']=check_native_fit(receipt,result['artifacts']['hwpx']['path'])
-            if result['content_fit']['status']=='failed':
-                result.update(status='failed',error='native_content_exceeds_source_allocation')
+            if result.get('page_count') != len(pages):
+                # An added page is a question pushed past its page: measure the cells anyway so the
+                # question is named instead of guessed (the cell is continued on the next page).
+                try:result['content_fit']=check_native_fit(receipt,result['artifacts']['hwpx']['path'])
+                except Exception as exc:result['content_fit']={'status':'unavailable','error':str(exc),'issues':[]}  # diagnosis only
+                result.update(status='failed', error='native_page_count_differs_from_source')
+            else:
+                result['content_fit']=check_native_fit(receipt,result['artifacts']['hwpx']['path'])
+                if result['content_fit']['status']=='failed':
+                    result.update(status='failed',error='native_content_exceeds_source_allocation')
         if result.get('status') == 'rendered':
             from restoration_batch import review_pack
             try:

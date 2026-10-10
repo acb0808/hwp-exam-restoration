@@ -28,6 +28,7 @@ MAX_LABEL_MM = 15.0         # wider text is a caption, not a point label
 RULE_MM = 0.25              # filled rules this thin are the bars of \sqrt and \frac (0.4pt = 0.14mm)
 SIGN_ABOVE_MM, SIGN_BELOW_MM = 0.5, 0.2  # how far signs (radical bar, degree, prime) reach past the letters and digits
 POINT_NAME = re.compile(r"[A-Za-z][A-Za-z0-9']{0,11}")
+BACKING_WIDER_MM, BACKING_TALLER_MM = 4.5, 1.2   # a label's own white backing: wider than its glyphs by a radical sign (3.5 mm measured), taller by its padding (0.7 mm)
 
 # Every node gets a running alias (xn1, xn2, ...) and an optional shift from \ExamShift<n>; the end of the
 # picture logs node boxes, named points and the bounding box. Nothing is drawn: renders stay pixel-identical.
@@ -36,7 +37,8 @@ NODE_HOOK = r'''\makeatletter
 \def\ExamPoints{}
 \def\ExamNodeDump{\ifnum\ExamNode>0 \foreach\exam@i in {1,...,\the\ExamNode}{\edef\exam@f{\csname ExamNodeName\exam@i\endcsname}%
   \pgfutil@ifundefined{pgf@sh@ns@\exam@f}{}{\edef\exam@s{\csname pgf@sh@ns@\exam@f\endcsname}\def\exam@c{coordinate}%
-  \ifx\exam@s\exam@c\else\path let \p1=(\exam@f.south west), \p2=(\exam@f.north east) in \pgfextra{\typeout{EXAMNODE \exam@i:\x1,\y1,\x2,\y2}};\fi}}\fi
+  \ifx\exam@s\exam@c\else
+  \path let \p1=(\exam@f.south west), \p2=(\exam@f.north east) in \pgfextra{\typeout{EXAMNODE \exam@i:\x1,\y1,\x2,\y2}};\fi}}\fi
   \@for\exam@p:=\ExamPoints\do{\pgfutil@ifundefined{pgf@sh@ns@\exam@p}{}{\path let \p1=(\exam@p) in \pgfextra{\typeout{EXAMPT \exam@p:\x1,\y1}};}}%
   \path let \p1=(current bounding box.south west), \p2=(current bounding box.north east) in \pgfextra{\typeout{EXAMBB \x1,\y1,\x2,\y2}};}
 \tikzset{every picture/.append style={execute at begin picture={\global\ExamNode=0\relax},execute at end picture={\ExamNodeDump}},
@@ -65,8 +67,8 @@ def point_names(text):
 
 def preamble(text, shifts=None):
     """Hook, the picture's point names and the shift table (node number -> (dx, dy) in mm, TikZ y up)."""
-    table = ''.join('\\expandafter\\def\\csname ExamShift%d\\endcsname{%.2fmm,%.2fmm}\n' % (int(n), dx, dy)
-                    for n, (dx, dy) in sorted((shifts or {}).items(), key=lambda x: int(x[0])))
+    table = ''.join('\\expandafter\\def\\csname ExamShift%d\\endcsname{%.2fmm,%.2fmm}\n' % (int(n), v[0], v[1])
+                    for n, v in sorted((shifts or {}).items(), key=lambda x: int(x[0])))
     return NODE_HOOK + '\\def\\ExamPoints{' + ','.join(point_names(text)) + '}\n' + table
 
 
@@ -234,8 +236,13 @@ def labels(pdf):
         if ink[2] - ink[0] > MAX_LABEL_MM or _framed(box, geo): continue
         c = _centre(ink); area = (ink[2] - ink[0]) * (ink[3] - ink[1])
         # A white-backed label (\ExamLengthArc) hides its own dashed arc on purpose; only solid lines count against it.
-        backed = any(f[0] <= c[0] <= f[2] and f[1] <= c[1] <= f[3] and _overlap(f, ink) > .5 * area for f in fills)
-        found[n] = {'ink': ink, 'backed': backed, 'text': ''.join(g['c'] for g in sorted(inside, key=lambda g: g['at'][0]))}
+        backing = next((f for f in fills if f[0] <= c[0] <= f[2] and f[1] <= c[1] <= f[3] and _overlap(f, ink) > .5 * area), None)
+        # The white backing hides every stroke under it, and a radical sign is no glyph: the backing is the label's size.
+        # Only a backing cut to the label: the white cell of a table took its whole cell for the label, and the
+        # six angles of one table were pushed onto their rules.
+        if backing and backing[2] - backing[0] <= ink[2] - ink[0] + BACKING_WIDER_MM and backing[3] - backing[1] <= ink[3] - ink[1] + BACKING_TALLER_MM:
+            ink = (min(ink[0], backing[0]), min(ink[1], backing[1]), max(ink[2], backing[2]), max(ink[3], backing[3]))
+        found[n] = {'ink': ink, 'backed': backing is not None, 'text': ''.join(g['c'] for g in sorted(inside, key=lambda g: g['at'][0]))}
     return geo, found
 
 
@@ -259,7 +266,10 @@ def _crosses(c0, c1, segments, arcs, step=.25, half=.12):
 
 
 def solve(geo, found):
-    """Greedy: each crossed label goes to the cheapest nearby spot. Returns {node: (dx, dy)} in mm, TikZ y up."""
+    """Greedy: each crossed label goes to the cheapest nearby spot. Returns {node: (dx, dy)} in mm, TikZ y up.
+    A label that finds no free spot within reach stays where it is. It is not led out with an arrow: the figure
+    copies its source, and where the source fits a value without an arrow, a value that does not fit says the
+    drawing differs from the source (the producer draws the arrows the source prints)."""
     vertices = [s['p'] for s in geo['segments']] + [s['q'] for s in geo['segments']] + list(geo['marks'])
     boxes = {n: l['ink'] for n, l in found.items()}; shifts = {}
     for n, l in found.items():
@@ -277,6 +287,10 @@ def solve(geo, found):
         clear_segments = [s for s in geo['segments'] if not s['symbol'] and (angle or _clip(s['p'], s['q'], core) == 0)]
         clear_arcs = [a for a in geo['arcs'] if _arc_in(a, core) == 0]
         best = (base, 0.0, 0.0)
+        # A label that only stands close to strokes (inside the margin) is never moved onto one: a table cell as
+        # high as its text has a rule within the margin above and below, and half a millimetre up, where only one
+        # rule is left in the margin, the text was on that rule (six angles of one table).
+        real = _cost(box, geo, l['backed'], others, 0)
         for r in RADII_MM:
             for k in range(DIRECTIONS):
                 dx, dy = r * math.cos(k * 2 * math.pi / DIRECTIONS), r * math.sin(k * 2 * math.pi / DIRECTIONS)
@@ -286,7 +300,7 @@ def solve(geo, found):
                     d = math.dist(c1, owner)
                     if any(math.dist(c1, v) < .9 * d for v in vertices if math.dist(v, owner) > 1.0): continue
                 cost = _cost(moved, geo, l['backed'], others, MARGIN_MM) + TRAVEL * r
-                if cost < best[0] - 1e-9: best = (cost, dx, dy)
+                if cost < best[0] - 1e-9 and _cost(moved, geo, l['backed'], others, 0) <= real + 1e-9: best = (cost, dx, dy)
         if best[1] or best[2]:
             shifts[n] = (round(best[1], 2), round(-best[2], 2))  # PDF y runs down
             boxes[n] = (box[0] + best[1], box[1] + best[2], box[2] + best[1], box[3] + best[2])

@@ -350,6 +350,13 @@ class Parser:
             arrow = {'xrightarrow': 'rarrow', 'xleftarrow': 'larrow', 'xleftrightarrow': 'lrarrow'}[c]
             return Node('relation', arrow, (top, bottom))
         if c in ('overset', 'stackrel'):
+            # \overset{rown}{AB} is the arc over AB, written without an arc package.
+            ahead = self.tokens[self.i:self.i + 3]
+            braced = (len(ahead) == 3 and ahead[0].value == '{' and ahead[0].kind == 'char'
+                      and ahead[1].kind == 'cmd' and ahead[1].value == 'frown' and ahead[2].value == '}')
+            if braced or (self.token.kind == 'cmd' and self.token.value == 'frown'):
+                self.i += 3 if braced else 1
+                return Node('accent', 'arch', (self.argument(),))
             top, base = self.argument(), self.argument()
             while base.kind in ('group', 'seq') and len(base.children) == 1:
                 base = base.children[0]

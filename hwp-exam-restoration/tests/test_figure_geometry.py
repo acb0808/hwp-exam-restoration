@@ -29,7 +29,7 @@ def kinds(picture, width=50):
 @unittest.skipUnless(HAS_TEX, 'no TeX engine')
 class SlipTests(unittest.TestCase):
     def test_eyeballed_tangent_is_reported_and_computed_one_is_not(self):
-        # 광남중 q20 style: a line from P meant to touch the circle.
+        # 중학교 시험지 A q20 style: a line from P meant to touch the circle.
         self.assertEqual(kinds(r'\begin{tikzpicture}\draw (0,0) circle (1);\draw (-3,1.05)--(3,1.05);\end{tikzpicture}'), ['tangent'])
         self.assertEqual(kinds(r'\begin{tikzpicture}\draw (0,0) circle (1);\draw (-3,1)--(3,1);\end{tikzpicture}'), [])
 
@@ -38,7 +38,7 @@ class SlipTests(unittest.TestCase):
                                r'\draw (0:1)--(100:1);\draw (180:1)--(2,1.2);\end{tikzpicture}'), [])
 
     def test_line_end_short_of_a_circle(self):
-        # 진성고 q20 style: a fold line meant to end at Q on the circle.
+        # 고등학교 시험지 C q20 style: a fold line meant to end at Q on the circle.
         self.assertEqual(kinds(r'\begin{tikzpicture}\draw (0,0) circle (1);\draw[dotted] (-3,-2)--(-0.75,-0.55);\end{tikzpicture}'), ['endpoint'])
         self.assertEqual(kinds(r'\begin{tikzpicture}\draw (0,0) circle (1);\draw[dotted] (-3,-2)--(225:1);\end{tikzpicture}'), [])
 
@@ -79,6 +79,21 @@ class NotesFlowTests(unittest.TestCase):
         state = {'reviews': {'5': {'status': 'passed', 'issues': []}}}
         for pdf in (bad, good):
             single.measured_slips(state, 5, [{'id': 'f', 'question_id': 'q20', 'status': 'rendered', 'png': str(pdf.with_name('diagram.png'))}], {})
+        self.assertEqual(single.current_notes(state), [])
+
+    def test_length_printed_without_its_dashed_arc_is_told_then_kept_until_drawn(self):
+        points = r'\coordinate (A) at (0,0);\coordinate (B) at (4,0);\coordinate (C) at (4,3);\draw (A)--(B)--(C)--cycle;'
+        bare = r'\begin{tikzpicture}' + points + r'\node[below] at (2,0) {$4\,\mathrm{cm}$};\end{tikzpicture}'
+        drawn = r'\begin{tikzpicture}' + points + r'\ExamLengthArc{A}{B}{$4\,\mathrm{cm}$}\end{tikzpicture}'
+        state = {'reviews': {'5': {'status': 'passed', 'issues': []}}}
+
+        def measure(tex):
+            item = {'id': 'f', 'question_id': 'q18', 'status': 'rendered', 'png': str(render(tex).with_name('diagram.png'))}
+            told = {}; single.measured_slips(state, 5, [item], told, {'f': tex}); return told
+        self.assertIn(r'\ExamLengthArc', measure(bare)['f'][0])
+        self.assertEqual(measure(bare), {})  # said once
+        self.assertEqual(single.current_notes(state)[0]['issues'], ['도형: q18 자동 측정 — 길이 표시 호 없음: 단위가 붙은 길이 라벨(4cm)이 있는데 점선 호가 하나도 없습니다'])
+        self.assertEqual(measure(drawn), {})
         self.assertEqual(single.current_notes(state), [])
 
 

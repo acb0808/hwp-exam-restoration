@@ -99,7 +99,7 @@ class SubmissionDiagnosticsTests(unittest.TestCase):
         self.assertEqual(validate('## left\n### q1\n본문')[1], [])
 
     def test_picture_choices_answer_is_a_choice_row(self):
-        """광남중 q2: ①~⑤ scatter plots drawn as one figure went to the 서답형 row in two runs."""
+        """중학교 시험지 A q2: ①~⑤ scatter plots drawn as one figure went to the 서답형 row in two runs."""
         rows = validate('## left\n### q2\n양의 상관관계를 나타내는 산점도는?\n' + answer(value='⑤'), True)[1]
         self.assertEqual(rows[0]['kind'], 'choice')
 

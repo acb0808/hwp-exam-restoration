@@ -3,8 +3,8 @@
 - 원본의 선·점·곡선·라벨·표식만. 스캔 crop·includegraphics·필기·없는 보조선 금지. 좌우로 놓인 그림은 한 tikzpicture.
 - 선·원 위의 점은 계산: 중점 `($(A)!0.5!(B)$)`, 수선의 발 `($(A)!(C)!(B)$)`, 원 위 `($(O)+(70:2)$)`. 교점·접점은 `\path[name path=l] ($(A)!-0.5!(B)$)--($(A)!1.5!(B)$);` `\path[name intersections={of=c and l,by={Q,P},sort by=l}];` 경로는 넉넉히 늘려 실제로 교차시킨다.
 - 문제 글에 적힌 위치 조건(중점, 수선의 발, 교점, 원 위의 점, 지름, 접선, 같은 길이, 직각 등)은 엔진이 렌더된 점 좌표와 대조해 어긋나면 알린다. 글에 나온 점은 같은 이름의 `\coordinate (M)`으로 두고 위 계산식으로 놓는다. 원본 그림은 축척대로가 아닐 때가 많다. 길이·각 조건(같은 길이, 중점, 직각)과 가로세로 비율 경고는 원본과 같게 그렸거나 글의 수치대로 그렸으면 그대로 둔다.
-- 라벨은 본문 크기로 엔진이 맞춘다. 글꼴 크기를 바꾸지 않고 자기 점 옆 빈 곳에 anchor로 둔다. 선·점 표식·다른 라벨에 걸친 라벨은 엔진이 렌더 뒤 4mm 안에서 옮기므로, 라벨이 조금 겹친다는 이유만으로 다시 그리지 않는다.
-- 짧은 명령: `\ExamRightAngle{A}{B}{C}`(B 직각) `\ExamLengthArc{A}{B}{$x$}`(점선 길이 곡선) `\ExamTicks{A}{B}{2}` `\ExamLabel[above]{A}{$A$}` `\ExamImplies{x,y}`(⇨, 글자 ⇨는 렌더 실패). 빗금은 `pattern=north east lines`.
+- 라벨은 본문 크기로 엔진이 맞춘다. 글꼴 크기를 바꾸지 않고 자기 점 옆 빈 곳에 anchor로 둔다. 걸친 라벨은 엔진이 가까운 빈자리로 옮긴다. 화살표는 원본에 있을 때만 그린다. 라벨 겹침으로는 다시 그리지 않는다.
+- 짧은 명령: `\ExamRightAngle{A}{B}{C}`(B 직각) `\ExamAngle{A}{B}{C}{$30^\circ$}`(B가 꼭짓점인 각 표시와 라벨. 항상 작은 쪽 각에 그려지므로 호를 직접 계산하지 않는다. 라벨 없으면 `{}`, 겹호 `[double]`, 표식 `[angle eccentricity=.6]{A}{B}{C}{$\bullet$}`, 호 없이 점만이면 `draw=none` 추가) `\ExamLengthArc{A}{B}{$x$}`(점선 길이 곡선. 도형을 다 그린 **뒤에** 쓰면 점 순서와 무관하게 바깥쪽으로 휜다. 원본이 안쪽이면 `[inside]`. 원본의 길이 숫자에 점선 호가 있으면 꼭 이 명령으로 그린다. 라벨만 적거나 직선 점선으로 바꾸지 않는다) `\ExamTicks{A}{B}{2}` `\ExamLabel[above]{A}{$A$}` `\ExamImplies{x,y}`(⇨, 글자 ⇨는 렌더 실패). 빗금은 `pattern=north east lines`.
 - 골격 `\ExamTemplate{triangle|triangle-height|right-midpoints|circle-triangle}{옵션}`은 연결이 같을 때만. 옵션·라벨 규칙은 references/tikz-exam.md(필요할 때만 연다).
 - 검수 checks(원본과 렌더를 하나씩 대응):
   - geometry: 원본의 각 점에서 뻗는 실선·점선을 끝점까지 따라가 렌더에도 같은 연결이 있는지 본다. 빠진 선과 **원본에 없는 선(보조선·반지름)** 모두 차이다. 다각형 꼭짓점 수, 곡선·호의 개수와 붙은 위치, 교차·지름·밑변도 센다.

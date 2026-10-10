@@ -8,7 +8,7 @@ in printed mm because fitted figures render at their print width:
 - two circles that almost touch.
 Clear crossings and clear gaps are drawings, not slips, and are never reported.
 """
-import functools, math, threading
+import functools, math, re, threading
 
 # PyMuPDF's glyph-height switch (restoration_labels._tight_glyphs) is process-wide, and renders of several
 # pages now run side by side in one MCP server: every text extraction holds this lock.
@@ -51,7 +51,7 @@ def _circle3(a, b, c):
 def extract(pdf_path):
     """Stroked segments and circular arcs in mm, small filled marks, and glyph centres."""
     import fitz
-    segments, arcs, glyphs, marks = [], [], [], []
+    segments, arcs, glyphs, marks, curves = [], [], [], [], []
     with fitz.open(pdf_path) as doc:
         page = doc[0]
         for drawing in page.get_drawings():
@@ -82,6 +82,10 @@ def extract(pdf_path):
             if drawing.get('closePath') and first and last and math.dist(first, last) >= 1e-6:
                 segments.append({'p': last, 'q': first, 'dashed': dashed, 'symbol': symbol})  # the implicit closing edge
             arcs.extend(_arcs(run, dashed))
+            if run:
+                # Every curve as sampled points, circular or not: what a ray can hit, and what a length curve is.
+                curves.append({'points': [run[0][0]] + [_bezier_point(bz, t / 8) for bz in run for t in range(1, 9)],
+                               'dashed': dashed, 'only': len(run) == len(drawing['items'])})
         for block in page.get_text('rawdict')['blocks']:
             for line in block.get('lines', []):
                 for span in line['spans']:
@@ -91,7 +95,7 @@ def extract(pdf_path):
                                        'box': (x0 * MM, y0 * MM, x1 * MM, y1 * MM)})
     # Fraction bars, radical bars and overlines are short horizontal rules hugging glyphs: label text, not figure lines.
     segments = [s for s in segments if not _text_rule(s, glyphs)]
-    return {'segments': segments, 'arcs': arcs, 'glyphs': glyphs, 'marks': marks}
+    return {'segments': segments, 'arcs': arcs, 'glyphs': glyphs, 'marks': marks, 'curves': curves}
 
 
 def _text_rule(s, glyphs):
@@ -243,6 +247,122 @@ def circle_warnings(geo):
     return out
 
 
+LENGTH_CHORD_MM = 5.0        # shorter dashed curves are marks
+LENGTH_BOW = (0.04, 0.35)    # bow height / chord of a length curve; flatter is a line, rounder a hidden edge
+ON_SIDE_MM = 0.8             # both ends of a length curve lie on the side it measures
+
+
+def _ray_hits(origin, direction, geo):
+    """True when a ray meets a solid figure line or curve (ticks, right-angle marks and dots do not count)."""
+    ox, oy = origin; dx, dy = direction
+    def crosses(p, q):
+        ex, ey = q[0] - p[0], q[1] - p[1]; det = ex * dy - ey * dx
+        if abs(det) < 1e-9: return False
+        t = (ex * (p[1] - oy) - ey * (p[0] - ox)) / det      # along the ray
+        u = (dx * (p[1] - oy) - dy * (p[0] - ox)) / det      # along the piece
+        return t > 0 and -1e-6 <= u <= 1 + 1e-6
+    for s in geo['segments']:
+        if not s['dashed'] and not s['symbol'] and math.dist(s['p'], s['q']) >= MIN_SEGMENT_MM and crosses(s['p'], s['q']): return True
+    for c in geo.get('curves', []):
+        pts = c['points']; xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
+        if c['dashed'] or max(max(xs) - min(xs), max(ys) - min(ys)) < MIN_SEGMENT_MM: continue
+        if any(crosses(p, q) for p, q in zip(pts, pts[1:])): return True
+    return False
+
+
+def inward_length_curves(geo):
+    """Dashed length curves along a side of the figure that bow into the figure while the other side of that
+    side is empty. A curve between two inner lines has figure on both sides and is left alone."""
+    found = []
+    sides = [s for s in geo['segments'] if not s['dashed'] and not s['symbol'] and math.dist(s['p'], s['q']) >= MIN_SEGMENT_MM]
+    for c in geo.get('curves', []):
+        pts = c['points']; a, b = pts[0], pts[-1]; chord = math.dist(a, b)
+        if not c['dashed'] or not c['only'] or chord < LENGTH_CHORD_MM: continue
+        top = pts[len(pts) // 2]; mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); bow = math.dist(top, mid)
+        if not LENGTH_BOW[0] <= bow / chord <= LENGTH_BOW[1]: continue
+        if not any(_segment_distance(s['p'], s['q'], a) < ON_SIDE_MM and _segment_distance(s['p'], s['q'], b) < ON_SIDE_MM for s in sides): continue
+        n = ((top[0] - mid[0]) / bow, (top[1] - mid[1]) / bow)
+        into = _ray_hits((top[0] + n[0] * .3, top[1] + n[1] * .3), n, geo)
+        free = not _ray_hits((mid[0] - n[0] * ON_SIDE_MM * 1.5, mid[1] - n[1] * ON_SIDE_MM * 1.5), (-n[0], -n[1]), geo)
+        if into and free: found.append(top)
+    return found
+
+
+def length_curve_findings(geo, declared_inside=0):
+    """One finding when more length curves bow into the figure than the TeX declares with [inside]."""
+    found = inward_length_curves(geo)
+    if len(found) <= declared_inside: return []
+    more = f' 외 {len(found) - declared_inside - 1}곳' if len(found) - declared_inside > 1 else ''
+    return [{'kind': 'length_curve', 'at': found[0], 'text': f"길이 호 방향: {_where(geo, found[0])}{more}의 점선 길이 호가 도형 안쪽으로 휩니다. "
+             "원본에서 도형 바깥쪽이면 \\ExamLengthArc{A}{B}{라벨}로 그리세요(휘는 쪽을 엔진이 바깥으로 정합니다. "
+             "이미 그 명령이면 [bend left]나 [bend right]로 반대쪽을 지정). "
+             "원본도 안쪽이면 \\ExamLengthArc[inside]{A}{B}{라벨}로 쓰면 이 안내가 없어집니다."}]
+
+
+UNIT_LABEL = re.compile(r'\d[,;~!]*(?:cm|mm|km|m)$')  # a label as restoration_figure_lint normalises it: 10cm, 4,cm, 1.5m
+
+
+def length_label_findings(geo, tex):
+    """Lengths printed with a unit in a figure that has no dashed curve at all. In the 25 archived source figures
+    where a producer drew this (80 of 259 renders with such labels), the source marked the length with a dashed arc
+    every time: the producer had left it out or drawn a straight dashed line. It cannot be switched off from
+    the TeX: when a comment for that was offered, the first live producer used it at once on a source that had the arc."""
+    if not tex or any(c['dashed'] for c in geo.get('curves', [])): return []
+    try:
+        from restoration_figure_lint import drawn_labels
+        try:
+            from restoration_tikz_templates import expand_templates
+            tex = expand_templates(tex)
+        except Exception: pass
+        units = [re.sub(r'[,;~!]', '', x) for x in drawn_labels(tex) if UNIT_LABEL.search(x)]
+    except Exception:
+        return []
+    if not units: return []
+    shown = ', '.join(units[:3]) + (' 등' if len(units) > 3 else '')
+    return [{'kind': 'length_label', 'at': None, 'text': f"길이 표시 호 없음: 단위가 붙은 길이 라벨({shown})이 있는데 점선 호가 하나도 없습니다. "
+             "원본에서 그 길이에 점선 호가 걸려 있으면 \\ExamLengthArc{A}{B}{라벨}로 그리세요(라벨만 적거나 직선 점선으로 바꾸지 않습니다). "
+             "지금까지 이런 도형의 원본에는 모두 점선 호가 있었습니다. 음영이나 선 위의 옅은 점선이라 축소 이미지에서는 안 보일 수 있으니 이미 연 확대 조각에서 그 숫자 양옆을 보세요. 정말 없을 때만 그대로 둡니다(검수 노트에 확인 항목으로 남습니다)."}]
+
+
+LINE_LABEL_NEAR_MM = 9.0         # a length printed beside the middle of its line (the 4 cm of a radius sat 6 to 8 mm off)
+LINE_LABEL_MIDDLE = (0.2, 0.8)
+UNIT_ON_LINE = re.compile(r'\d(?:cm|mm|km|m)(?![a-z])')
+
+
+def length_line_findings(geo):
+    """Lengths printed with a unit beside the middle of a straight dashed line, in a figure that has dashed curves
+    elsewhere (length_label_findings speaks for a figure with none). A producer told to draw the missing length arcs
+    drew one and left the other length as a dashed radius: the same source figure in 5 of 10 runs. In all seven
+    archived source figures with such a line the source marked that length with a dashed arc.
+    Advice only: a hidden edge of a solid may be dashed and carry its length in the source too."""
+    if not any(c['dashed'] for c in geo.get('curves', [])): return []
+    found = []
+    for s in geo['segments']:
+        p, q = s['p'], s['q']; length = math.dist(p, q)
+        if not s['dashed'] or s['symbol'] or length < LENGTH_CHORD_MM: continue
+        ux, uy = (q[0] - p[0]) / length, (q[1] - p[1]) / length; near = []
+        for g in geo['glyphs']:
+            if not g['c'].strip(): continue
+            dx, dy = g['at'][0] - p[0], g['at'][1] - p[1]
+            if LINE_LABEL_MIDDLE[0] <= (dx * ux + dy * uy) / length <= LINE_LABEL_MIDDLE[1] and abs(dx * uy - dy * ux) <= LINE_LABEL_NEAR_MM:
+                near.append((g['at'][0], g['c']))
+        text = ''.join(c for _, c in sorted(near)); unit = UNIT_ON_LINE.search(text)
+        if not unit: continue
+        # A length arc drawn over the same two ends already marks it.
+        if any(c['dashed'] and min(math.dist(c['points'][0], p) + math.dist(c['points'][-1], q),
+                                   math.dist(c['points'][0], q) + math.dist(c['points'][-1], p)) < 3 for c in geo['curves']): continue
+        label = re.search(r'[\d.,√]*' + re.escape(unit.group(0)), text).group(0)
+        found.append({'kind': 'length_line', 'at': ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2),
+                      'text': f"직선 점선 위의 길이: {label} 라벨이 직선 점선 가운데에 있습니다. 원본에서 그 길이가 점선 호이면 "
+                              "선은 원본대로(대개 실선) 그리고 \\ExamLengthArc{A}{B}{라벨}을 쓰세요. 원본도 직선 점선이면 그대로 둡니다."})
+    return found[:2]
+
+
+def length_line_warnings(pdf_path):
+    try: return [f['text'] for f in length_line_findings(extract(pdf_path))]
+    except Exception: return []  # a measuring aid
+
+
 @_one_at_a_time
 def labels_collide(pdf_path, share=0.3):
     """True when glyphs of different labels overlap: geometry was shrunk under its fixed-size labels."""
@@ -263,19 +383,21 @@ def labels_collide(pdf_path, share=0.3):
     return False
 
 
-def geometry_findings(pdf_path):
+def geometry_findings(pdf_path, declared_inside=0, tex=None):
     geo = extract(pdf_path)
     ends = endpoint_warnings(geo)
     # Slips are isolated; many near-touching ends are an illustration's detail (towers, taps), not construction.
     if len(ends) > MAX_ENDPOINT_FINDINGS: ends = []
     found, seen = [], set()
-    for f in tangent_warnings(geo) + ends + circle_warnings(geo):
+    for f in tangent_warnings(geo) + ends + circle_warnings(geo) + length_curve_findings(geo, declared_inside) + length_label_findings(geo, tex):
         if f['text'] not in seen: seen.add(f['text']); found.append(f)
     return found
 
 
-def geometry_warnings(pdf_path):
+def geometry_warnings(pdf_path, tex=None):
+    """tex: the figure's source, read for the length curves it declares as [inside] and for the lengths it prints."""
     try:
-        return [f['text'] for f in geometry_findings(pdf_path)][:6]
+        declared = len(re.findall(r'\\ExamLengthArc\s*\[[^\]]*\binside\b', re.sub(r'(?<!\\)%[^\n]*', '', tex or '')))
+        return [f['text'] for f in geometry_findings(pdf_path, declared, tex)][:6]
     except Exception:
         return []  # a measuring aid; the render itself already succeeded

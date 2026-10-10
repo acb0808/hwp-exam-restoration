@@ -41,6 +41,15 @@ def _studio_equation(latex,eqid):
     # HWP equations have one fraction size, so \dfrac and \tfrac print exactly like \frac.
     latex=re.sub(r'\\[dt]frac(?![A-Za-z])',r'\\frac',latex)
     if re.search(r'\\(?:i+nt|oint)(?![A-Za-z])',latex):latex=re.sub(r'\\[ ,;:]\s*(?=d[A-Za-z])','',latex)  # same for the dx of an integral
+    # A thin space before a unit (4\,\mathrm{cm}) prints like the plain 4 \mathrm{cm}: the upright unit is its own run.
+    latex=re.sub(r'(?<=[0-9A-Za-z})\]])\s*\\[ ,;:]\s*(?=\\(?:mathrm|text|textrm)\{\s*[A-Za-z%°])',' ',latex)
+    # \widehat{AB} prints a hat (^) over AB. Exam readings mean an arc or an angle, so the choice is asked for once.
+    hat=re.search(r'\\widehat\s*\{\s*(?:\\mathrm\s*\{\s*)?[A-Z]{2,3}\s*\}',latex)
+    if hat:
+        from restoration_equations import EquationError
+        raise EquationError('ambiguous_hat',r'\widehat over point names prints a hat, not an arc or an angle',
+                            diagnostics=[{'code':'ambiguous_hat','message':r'\widehat over point names','severity':'error',
+                                          'start':hat.start(),'end':hat.end()}])
     result=compile_equation({'type':'equation','latex':latex},eqid)
     # Studio calls its parsed AST -> native-script output "fallback". This is
     # distinct from copying failed LaTeX into script; require the parsed receipt.

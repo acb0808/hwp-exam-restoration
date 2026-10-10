@@ -92,6 +92,36 @@ class ReviewNotesTests(unittest.TestCase):
         for header in ('쪽', '문항', '구분', '검수 내용'):
             self.assertIn(f'<hp:t>{header}</hp:t>', xml)
 
+    def test_many_notes_continue_on_further_notes_pages(self):
+        from restoration_answers import note_row_height
+        # 45 notes, each as long as a note may be (170 characters: five lines, 29 mm): six fit one page.
+        notes = [f'경미: q{n % 2 + 1} ' + '가' * 200 for n in range(45)]
+        result = self.review([{'page': 1, 'status': 'passed_with_notes', 'issues': notes},
+                              {'page': 2, 'status': 'passed', 'issues': []}])
+        self.assertEqual(result['status'], 'notes_build_required', result)
+        pages = job.assemble(self.root)
+        sheets = [p for p in pages if p.get('role') == 'review_notes']
+        self.assertEqual([p.get('role') for p in pages], [None] + ['review_notes'] * len(sheets) + ['answer_sheet'])
+        self.assertEqual(len(sheets), 8)
+        self.assertEqual([p['note_part'] for p in sheets], [[n, 8] for n in range(1, 9)])
+        self.assertEqual(sum(len(p['note_rows']) for p in sheets), 45)
+        self.assertEqual(len({p['page_number'] for p in pages}), len(pages))
+        for sheet in sheets:
+            heights = [note_row_height(r['text'], r.get('image')) for r in sheet['note_rows']]
+            self.assertLessEqual(sum(heights), single.NOTE_PAGE_BUDGET_MM)
+            self.assertTrue(all(len(r['text']) <= 170 for r in sheet['note_rows']))
+        built = self.call('build', output=str(self.root / 'exam.hwpx'), title='test', school='test', year='2026',
+                          exam_title='test', native=False)
+        self.assertEqual(built['status'], 'built', built)
+        with zipfile.ZipFile(built['output']) as z:
+            xml = z.read('Contents/section0.xml').decode()
+        self.assertIn('검수 노트 (1/8)', xml)
+        self.assertIn('검수 노트 (8/8)', xml)
+        self.assertLess(xml.index('검수 노트 (8/8)'), xml.index('정답표'))
+        value = self.native('many-notes')
+        self.assertEqual([p['page'] for p in value['review_inputs']['pages']], [1, 2])  # no notes page is reviewed
+        self.assertEqual(self.call('status')['status'], 'complete')
+
     def test_answer_changing_issue_gets_one_repair_round_then_becomes_unresolved_note(self):
         first = self.review([{'page': 1, 'status': 'failed', 'issues': [TEXT_ERROR, FIGURE_NOTE]},
                              {'page': 2, 'status': 'passed', 'issues': []}])

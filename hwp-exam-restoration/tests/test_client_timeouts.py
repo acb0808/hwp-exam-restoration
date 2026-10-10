@@ -39,6 +39,17 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(merged['pages'], {'1': {'x': 2}, '2': {'x': 5}})
         self.assertEqual(merged['reviews'], {}); self.assertNotIn('gone', merged); self.assertEqual(merged['new'], 1)
 
+    def test_tables_first_made_by_two_renders_at_once_keep_both_pages(self):
+        # Antigravity run of 3 pages: the render of page 4 ended after that of page 3 and replaced the tables page 3
+        # had just created, so a warning was no longer marked as told and its note was lost.
+        base = {'pages': {}}
+        now = {'pages': {}, 'geometry_rounds': {'3/q13-figure-1': 1}, 'geometry_notes': {'3': {'q13-figure-1': ['note']}}}
+        mine = {'pages': {}, 'geometry_rounds': {}, 'geometry_notes': {'4': {}}}
+        merged = single.merge_state(now, base, mine)
+        self.assertEqual(merged['geometry_rounds'], {'3/q13-figure-1': 1})
+        self.assertEqual(merged['geometry_notes'], {'3': {'q13-figure-1': ['note']}, '4': {}})
+        self.assertEqual(single.merge_state({'a': 1}, {}, {'a': {'x': 1}}), {'a': {'x': 1}})   # a value of another kind is replaced
+
 
 class RenderTests(Fixture):
     def slow_render(self, seconds, mark):
@@ -108,8 +119,9 @@ class BuildTests(Fixture):
             for p in patches: p.stop()
 
     def test_an_export_that_ends_within_the_wait_is_reported_by_the_build_call(self):
-        ticks = iter([True, False])  # one poll inside the 0.6 s wait
-        patches = self.start_build(lambda run: next(ticks, False), [{'status': 'building'}, {'status': 'pending_review'}])
+        ticks = iter([True, False])  # one poll (0.5 s) inside the wait
+        # The wait counts from the start of the call, so 0.6 s leaves the build itself only 0.1 s: too little on a busy PC.
+        patches = [patch.dict(os.environ, {'HWP_MCP_WAIT_SECONDS': '5'})] + self.start_build(lambda run: next(ticks, False), [{'status': 'building'}, {'status': 'pending_review'}])
         result = self.run_with(patches, lambda: self.call('build', output=str(self.root / 'out.hwpx'), title='t', school='s', year='2026', exam_title='e'))
         self.assertEqual(result['status'], 'pending_review'); self.assertTrue(result['build_output'].endswith('out.hwpx'))
 

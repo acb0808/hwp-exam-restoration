@@ -145,18 +145,18 @@
     },
     {
       "path": "latex_to_hwpeqn/parser.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/parser.py",
-      "sha256": "4b7fb77542f3c49ede98a5d4b9eaf31ad10dfe7a666f596c3facc7ba4611e076"
+      "source": "repo latex_to_hwpeqn/parser.py (0.3.0 + exam readability spacing, arcs, degrees)",
+      "sha256": "e694b37ed52efdfd0cdfcaeb5a9ad514c48bf3422e66ffe9bfd722d74867fdfb"
     },
     {
       "path": "latex_to_hwpeqn/renderer.py",
-      "source": "repo latex_to_hwpeqn/renderer.py (0.3.0 + exam readability spacing)",
-      "sha256": "e797c532548f94923c5b76c99e692dc96b592024d7b403da5091c15ac43da7d4"
+      "source": "repo latex_to_hwpeqn/renderer.py (0.3.0 + exam readability spacing, arcs, degrees)",
+      "sha256": "9112909d4fdfd98a08bd211076bbc65c9aa8e25e515c1b948f417b9cc2224feb"
     },
     {
       "path": "latex_to_hwpeqn/symbols.py",
-      "source": "latex_to_hwpeqn-0.3.0-py3-none-any.whl:latex_to_hwpeqn/symbols.py",
-      "sha256": "f770e94da09dbe5d6e2307ffbe69f6f0a5775f5f0b2083218f10a5db01c8b212"
+      "source": "repo latex_to_hwpeqn/symbols.py (0.3.0 + exam readability spacing, arcs, degrees)",
+      "sha256": "c8ca81d633ab717f9fc505e458fad1878726a43f41401a765f8825cc68699cbd"
     },
     {
       "path": "latex_to_hwpeqn/schemas/editor-document-v1.schema.json",

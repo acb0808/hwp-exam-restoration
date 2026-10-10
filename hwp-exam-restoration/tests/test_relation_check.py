@@ -58,7 +58,7 @@ class MeasuredRelationTests(unittest.TestCase):
                          ['center', 'diameter', 'tangent'])
 
     def test_incircle_that_touches_one_side_only(self):
-        # 광남중 q16 in one run: the circle sat on BC and missed the other two sides.
+        # 중학교 시험지 A q16 in one run: the circle sat on BC and missed the other two sides.
         tri = {'A': (10, 0), 'B': (0, 30), 'C': (40, 30)}
         self.assertEqual([k for k, _ in slips('삼각형 ABC의 내접원', figure(tri, [((17, 24), 6)]))], ['incircle'])
 
@@ -91,7 +91,7 @@ class MeasuredRelationTests(unittest.TestCase):
         circle = [((20, 20), 10)]
         clear = figure({}, circle, labels={'P': (33, 18)}, vertices=[(31, 20), (5, 5)])
         self.assertEqual(slips(text, clear), [('on_circle', 1.0)])
-        # v2.7.5 진성고 q20: the label sat between a line end and the crossing that really was P
+        # v2.7.5 고등학교 시험지 C q20: the label sat between a line end and the crossing that really was P
         unclear = figure({}, circle, labels={'P': (33, 18)}, vertices=[(31, 20), (30, 20)])
         self.assertEqual(slips(text, unclear), [])
         # a label match that is far off is a wrong match, an exact name that is far off is an error

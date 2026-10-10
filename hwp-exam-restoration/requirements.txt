@@ -1,6 +1,7 @@
 # Python 3.12; install into this skill's .venv. No global install is required.
 jsonschema==4.26.0
 PyMuPDF==1.26.4
+numpy==2.5.1  # optional: finds each figure on the source page; without it the producer's box is used
 Pillow==12.2.0
 psutil==7.2.2
 pywin32==311; sys_platform == "win32"

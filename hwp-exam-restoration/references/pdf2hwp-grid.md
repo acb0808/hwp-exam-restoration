@@ -34,11 +34,11 @@
 fields 파일 예:
 
 ```json
-{"school":"명문고등학교","year":"2025","exam_title":"고1-2 중간고사"}
+{"school":"예시고등학교","year":"2025","exam_title":"고1-2 중간고사"}
 ```
 
 ```text
-python <SKILL_DIR>/scripts/restore.py build <accepted-job> <exam.hwpx> --template-dir <SKILL_DIR>/assets/templates/pdf2hwp-grid --template-fields <fields.json> --title "2025년 명문고 1-2 중간고사"
+python <SKILL_DIR>/scripts/restore.py build <accepted-job> <exam.hwpx> --template-dir <SKILL_DIR>/assets/templates/pdf2hwp-grid --template-fields <fields.json> --title "2025년 예시고 1-2 중간고사"
 python <SKILL_DIR>/scripts/restore.py native <accepted-job> <exam.build.json> <empty-native-output-directory>
 ```
 

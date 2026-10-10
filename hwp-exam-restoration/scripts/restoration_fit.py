@@ -8,6 +8,26 @@ from xml.etree import ElementTree as ET
 import zipfile
 HP='{http://www.hancom.co.kr/hwpml/2011/paragraph}'
 
+def content_height(cell,lines):
+    """(height in HWPUNIT, continued) of a question cell's content.
+    A cell pushed past the page bottom is continued on the next page and its line positions start again from 0
+    there, so the parts are added up and the cell is reported as continued. A figure floats over the space its
+    anchor paragraph reserves below itself, which no line records, so its bottom edge counts as content too."""
+    top=max(int(n.get('vertpos','0'))+int(n.get('vertsize','0')) for n in lines)
+    sub=cell.find(HP+'subList');total=part=0;previous=-1;continued=False
+    for paragraph in (sub.findall(HP+'p') if sub is not None else []):
+        first=None
+        for n in paragraph.findall(HP+'linesegarray/'+HP+'lineseg'):
+            position=int(n.get('vertpos','0'))
+            if position<previous:total+=part;part=0;continued=True
+            if first is None:first=position
+            previous=position;part=max(part,position+int(n.get('vertsize','0')))
+        for picture in paragraph.iter(HP+'pic'):
+            size,place=picture.find(HP+'sz'),picture.find(HP+'pos')
+            if first is None or size is None or place is None or place.get('treatAsChar')=='1':continue
+            part=max(part,first+int(place.get('vertOffset','0'))+int(size.get('height','0')))
+    return max(top,total+part),continued
+
 def check_native_fit(build_receipt,native_hwpx):
     with zipfile.ZipFile(native_hwpx) as archive:
         roots=[ET.fromstring(archive.read(n)) for n in archive.namelist()
@@ -15,7 +35,7 @@ def check_native_fit(build_receipt,native_hwpx):
     tables={}
     for root in roots:
         for table in root.iter(HP+'tbl'):tables.setdefault(table.get('id'),[]).append(table)
-    issues=[];checked=0
+    issues=[];checked=0;measured=[]
     for page in build_receipt['pages']:
         for block in page['objects']:
             if block['kind'] in ('question_cell','page_grid'):
@@ -38,8 +58,15 @@ def check_native_fit(build_receipt,native_hwpx):
                     issues.append({**context,'code':'question_cell_expanded'})
                 lines=list(cell.iter(HP+'lineseg'))
                 if not lines:issues.append({**context,'code':'native_line_metrics_missing'})
-                elif max(int(n.get('vertpos','0'))+int(n.get('vertsize','0')) for n in lines)>round(block['available_height_mm']*7200/25.4)+2:
-                    issues.append({**context,'code':'question_cell_content_overflow'})
+                else:
+                    content,continued=content_height(cell,lines)
+                    figures=sum(int(size.get('height','0')) for picture in cell.iter(HP+'pic') for size in picture.findall(HP+'sz'))
+                    measured.append({**context,'content_mm':round(content*25.4/7200,1),'available_mm':round(block['available_height_mm'],1),
+                                     'cell_mm':round(block['cell_height_mm'],2),'figures_mm':round(figures*25.4/7200,1),'continued':continued,
+                                     'rows':block.get('logical_row_span',block['row_span']),'column':block.get('column')})
+                    if continued or content>round(block['available_height_mm']*7200/25.4)+2:
+                        issues.append({**context,'code':'question_cell_content_overflow','actual_mm':measured[-1]['content_mm'],
+                                       'available_mm':measured[-1]['available_mm']})
                 allowed={b['container_id'] for b in page['objects'] if b['kind']=='logical_box'}
                 if not {t.get('id') for t in cell.iter(HP+'tbl')}<=allowed:
                     issues.append({**context,'code':'unexpected_nested_layout_container'})
@@ -85,5 +112,5 @@ def check_native_fit(build_receipt,native_hwpx):
                     issues.append({**context,'code':'equation_width_exceeds_source_box',
                                    'actual_mm':int(size.get('width'))*25.4/7200,'available_mm':width})
     return {'status':'failed' if issues else 'measured_pass_needs_visual_review',
-            'checked_containers':checked,'issues':issues,'visual_status':'not_verified',
+            'checked_containers':checked,'issues':issues,'question_cells':measured,'visual_status':'not_verified',
             'limitations':['horizontal_mixed_text_extent_requires_visual_review','font_and_source_baselines_require_visual_review']}

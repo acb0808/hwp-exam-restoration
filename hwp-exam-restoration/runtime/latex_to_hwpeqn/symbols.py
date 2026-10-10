@@ -31,11 +31,11 @@ SYMBOLS.update(dict(
     hookleftarrow='hookleft', hookrightarrow='hookright', mapsto='mapsto',
     vert='vert', Vert='VERT', lvert='vert', rvert='vert', lVert='VERT', rVert='VERT',
     ldots='LDOTS', cdots='cdots', vdots='VDOTS', ddots='DDOTS',
-    # Hancom equation format rev.1.3, section 2.1 uses literal U+25A1 in script.
-    square='□', Box='□',
     triangle='TRIANGLE', triangledown='TRIANGLED', angle='ANGLE', measuredangle='MSANGLE',
     sphericalangle='SANGLE', vdash='VDASH', dashv='HLEFT', bot='BOT', perp='BOT',
     top='TOP', models='MODELS', degree='DEG',
+    # Hancom equation format rev.1.3, section 2.1 uses literal U+25A1 in script.
+    square='□', Box='□',
     int='int', oint='oint', iint='DINT', iiint='TINT', oiint='ODINT', oiiint='OTINT',
 ))
 
@@ -43,7 +43,9 @@ FUNCTIONS = frozenset('sin cos tan cot sec cosec csc arcsin arccos arctan sinh c
 ACCENTS = dict(hat='hat', widehat='hat', check='check', widecheck='check', tilde='tilde',
                widetilde='tilde', acute='acute', grave='grave', dot='dot', ddot='ddot',
                bar='bar', overline='bar', vec='vec', overrightarrow='vec',
-               overleftrightarrow='dyad', underline='under', overparen='arch')
+               overleftrightarrow='dyad', underline='under', overparen='arch',
+               # Arc notations of other packages; exam readings use them for the same printed arc.
+               wideparen='arch', overarc='arch', overgroup='arch')
 FONTS = dict(mathrm='rm', mathit='it', mathbf='rmbold', boldsymbol='bold', bm='bold')
 DECLARATIONS = dict(rm='rm', it='it', bf='rmbold')
 SPACES = {',': '`', ':': '``', ';': '```', ' ': '~', 'quad': '~~', 'qquad': '~~~~',
@@ -75,3 +77,6 @@ MATH_ALPHABETS = {
 }
 SYMBOLS.update(nabla='NABLA', setminus='∖')
 UNICODE.update({'∇': 'NABLA', '∖': '∖'})
+# Korean exams print parallel as a slanted double stroke, typed // in Hancom equations.
+SYMBOLS.update(parallel='//', implies='RARROW', iff='LRARROW', lt='<', gt='>')
+UNICODE.update({'∠': 'ANGLE', '△': 'TRIANGLE', '⊥': 'BOT', '∥': '//', '°': 'DEG', '∴': 'THEREFORE', '∵': 'BECAUSE'})

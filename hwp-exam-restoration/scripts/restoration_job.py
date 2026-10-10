@@ -387,5 +387,5 @@ def assemble(job_dir:Path)->list:
             from restoration_single import validate_accepted_result as validate_single
             validate_single(root,value,matches[0]);result.append(value)
         from restoration_answers import append_answer_page
-        from restoration_single import append_review_notes
-        return append_review_notes(root,append_answer_page(root,manifest,result))
+        from restoration_single import append_review_notes,layout_adjustments
+        return append_review_notes(root,append_answer_page(root,manifest,layout_adjustments(root,result)))

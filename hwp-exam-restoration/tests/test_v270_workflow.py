@@ -133,7 +133,7 @@ class Workflow270Tests(unittest.TestCase):
     def test_public_transport_accepts_batch_alongside_optional_help(self):
         import restoration_mcp
         inventory = asyncio.run(restoration_mcp.mcp.list_tools())
-        self.assertEqual(len(inventory), 10)
+        self.assertEqual(len(inventory), 11)  # v2.8.0 adds hwp_submit_review
         schema = next(t.inputSchema for t in inventory if t.name == 'hwp_assign')
         self.assertIn('items', schema['properties'])
         result = asyncio.run(restoration_mcp.hwp_assign(str(self.root), items=self.assignments()))

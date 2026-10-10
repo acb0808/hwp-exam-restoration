@@ -1,4 +1,4 @@
-"""Fixes from the first installed v2.7.9 run (하안북중 2-2, 5 pages, opencode muse)."""
+"""Fixes from the first installed v2.7.9 run (중학교 시험지 B 2-2, 5 pages, opencode muse)."""
 import sys
 import tempfile
 import unittest
@@ -42,7 +42,7 @@ class PatternLibraryTests(unittest.TestCase):
 
 
 class FittedFigureTests(unittest.TestCase):
-    """광남중 3-2: label size ranged 0.6x-1.4x with width_mm, and extended construction paths left q18 64% blank."""
+    """중학교 시험지 A 3-2: label size ranged 0.6x-1.4x with width_mm, and extended construction paths left q18 64% blank."""
     def test_construction_paths_do_not_size_the_picture(self):
         doc = single.diagram_document(r'\begin{tikzpicture}\path[name path=a] (0,0)--(9,9);\path [draw, name path=b] (0,1)--(1,0);\path[overlay,name path=c] (0,0)--(1,1);\end{tikzpicture}')
         self.assertIn(r'\path[overlay,name path=a]', doc)

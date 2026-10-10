@@ -261,7 +261,7 @@ class PictureChoiceTests(unittest.TestCase):
 
 
 class FigureFitTests(unittest.TestCase):
-    """Observed on 광남중 p.1: a wide picture-choice figure and a partial rerender list."""
+    """Observed on 중학교 시험지 A p.1: a wide picture-choice figure and a partial rerender list."""
     def setUp(self):
         self.case = workflow.SingleReviewTests()
         self.case.setUp()
