@@ -6,7 +6,7 @@
 | MCP가 도구 목록에 없음 | 사용 앱의 MCP 서버 연결을 새로고침하고 연결 상태를 확인합니다. |
 | OpenCode에서 서버가 없음 | `%USERPROFILE%\.config\opencode\opencode.json`의 `mcp.hwp-restoration` 항목과 실행 경로를 확인한 뒤 `opencode mcp list`를 실행합니다. JSONC 주석을 지우지 않습니다. |
 | Antigravity에서 서버가 없음 | `~/.gemini/config/mcp_config.json`에 등록됐는지, 앱에서 해당 서버를 다시 연결했는지 확인합니다. |
-| runtime_version이 2.8.0이 아님 | 제작을 시작하지 말고 MCP 서버 연결을 새로고침합니다. |
+| runtime_version이 2.8.1이 아님 | 제작을 시작하지 말고 MCP 서버 연결을 새로고침합니다. |
 | Python 또는 라이브러리 오류 | 전용 `.mcp-venv`와 `requirements-mcp.txt` 경로를 확인합니다. 전역 Python에는 설치하지 않습니다. |
 | OpenCode에서 출력이 `Request timed out`으로 끊김 | `opencode.json`의 `mcp.hwp-restoration` 항목에 `"timeout": 15000`이 있으면 그 줄을 지우고 OpenCode를 다시 시작합니다. |
 | 도형 렌더가 실패함 | TeX 실행 파일과 TikZ 설치 여부를 확인합니다. |

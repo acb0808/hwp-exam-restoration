@@ -30,7 +30,7 @@ def subagent_type(name):
         if (Path.home()/'.gemini/config/agents'/f'{name}.md').read_bytes()==(shared.SKILL/'agents'/f'{name}.md').read_bytes():return name
     except OSError:pass
     return 'self'
-RUNTIME_VERSION='2.8.0'  # Loaded code version, never read from a replaced manifest.
+RUNTIME_VERSION='2.8.1'  # Loaded code version, never read from a replaced manifest.
 TIKZ_HELPERS=shared.SKILL/'assets/tikz/exam-marks.tex'
 
 
@@ -364,6 +364,32 @@ def text_only_review(issues):
             kept.append('경미: (텍스트 전용 작업이라 수정하지 않음) '+body)
         else:kept.append(issue)
     return kept,dropped
+# A difference inside a figure never opens a repair round, whatever tag the reviewer chose: only a figure that is
+# absent from the output is a repair (the reviewer's role file says so, but a reviewer started from an old role
+# file tagged a missing radius 누락, and the rebuild and second review cost a third of the run). Whether the figure
+# is there is read from the job, not from the reviewer's words.
+FIGURE_FINDING_TAGS=('누락','오독')
+BODY_WORDS=re.compile(r'발문|본문|문구|문장|조건|보기|선지|선택지|배점')
+def drawn_figure_questions(root,state,page):
+    """Questions of one page whose figures are all rendered in the accepted batch (so they are in the output).
+    A question with two figures of which one has no render is not in the set: that one is missing."""
+    selected=(state.get('figures') or {}).get(str(page))
+    if not selected:return set()
+    try:
+        rendered={i['id'] for i in job.load_json(Path(selected['path']).parent/'batch.json')['items'] if i.get('png') and Path(i['png']).is_file()}
+        wanted={str(q['id']).lower():_figure_ids(q) for q in reading(root,state,page)['questions']}
+    except (OSError,ValueError,KeyError,TypeError):return set()
+    return {q for q,ids in wanted.items() if ids and set(ids)<=rendered}
+def figure_issues_as_notes(issues,drawn):
+    """Repair issues that only describe a figure which is in the output become 도형: notes. An issue stays as
+    written when it names no question, names one without a rendered figure, or speaks of the body text."""
+    out=[]
+    for issue in issues:
+        tag=issue_tag(issue);named={q.lower() for q in re.findall(r'(?<![A-Za-z0-9])(q\d+(?:-\d+)?)',issue,re.I)}
+        if tag in FIGURE_FINDING_TAGS and named and named<=drawn and re.search(FIGURE_WORDS,issue) and not BODY_WORDS.search(issue):
+            out.append('도형: '+re.sub(r'^\s*\[?\s*'+tag+r'\s*\]?\s*[:：\-—]?\s*','',issue))
+        else:out.append(issue)
+    return out
 MEASURED_NOTE=re.compile(r'^도형: (q\d+) 자동 측정 — ([^:]+):')
 def fold_measured(own,measured):
     """A measured slip of a figure the reviewer noted too goes into that note (one table row, one picture),
@@ -1762,9 +1788,10 @@ def perform(action,p,root,state):
         report.parent.mkdir(parents=True,exist_ok=True);report.write_text('\n'.join(filled)+'\n',encoding='utf-8')
         state['review_submission']={'round':number,'report':str(report),
                                     'reviews':[{'page':r['page'],'status':r['status'],'issues':list(r['issues'])} for r in rows]}
-        judged=(lambda issues:text_only_review(issues)[0]) if not figures_wanted(root) else (lambda issues:issues)
+        judged=((lambda page,issues:text_only_review(issues)[0]) if not figures_wanted(root)
+                else (lambda page,issues:figure_issues_as_notes(issues,drawn_figure_questions(root,state,page))))
         return {'status':'review_recorded','round':number,'report_path':str(report),
-                'verdicts':[{'page':r['page'],'verdict':verdict(judged(r['issues']))} for r in rows],
+                'verdicts':[{'page':r['page'],'verdict':verdict(judged(r['page'],r['issues']))} for r in rows],
                 'next_action':'Tell the main agent only: review submitted, and one line per page that is not passed. '
                               'The main agent then calls hwp_finish_review(job, reviewer_id, spawn_evidence) without reviews.'}
     if action=='finish_review':
@@ -1804,6 +1831,7 @@ def perform(action,p,root,state):
         for r in rows:
             n=str(r['page']);issues=list(r['issues'])
             if text_only:issues,_=text_only_review(issues)  # figures are left out on purpose: not a finding
+            else:issues=figure_issues_as_notes(issues,drawn_figure_questions(root,state,r['page']))
             status=verdict(issues)
             if status=='failed':
                 counts[n]=counts.get(n,0)+1

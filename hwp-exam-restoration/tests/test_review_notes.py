@@ -13,6 +13,8 @@ from test_answer_sheet import MD
 
 FIGURE_NOTE = '도형: q1 20° 라벨이 O 옆에 있음(원본은 D 근처)'
 TEXT_ERROR = '오독: q2 분모 2가 3으로 출력됨'
+FIGURE_REPAIR = '누락: q3 도형에서 부채꼴의 반지름 OP 실선 및 중심 O의 직각 표시 누락'
+FIGURE_REPAIR_AS_NOTE = '도형: q3 도형에서 부채꼴의 반지름 OP 실선 및 중심 O의 직각 표시 누락'
 
 
 class ReviewNotesTests(unittest.TestCase):
@@ -159,6 +161,22 @@ class ReviewNotesTests(unittest.TestCase):
                 self.assertEqual(result['status'], 'failed', result)
                 self.assertIn('invalid_review_verdict', result['message'])
 
+    def test_a_figure_difference_tagged_as_a_repair_opens_no_repair_round(self):
+        # v2.8.1: a reviewer started from an old role file tags a figure difference 누락. The figure is in the output.
+        from unittest import mock
+        with mock.patch.object(single, 'drawn_figure_questions', return_value={'q1'}):
+            result = self.review([{'page': 1, 'status': 'failed', 'issues': [FIGURE_REPAIR.replace('q3', 'q1')]},
+                                  {'page': 2, 'status': 'passed', 'issues': []}])
+        self.assertEqual(result['status'], 'notes_build_required', result)
+        self.assertEqual(result['review_notes'], [{'page': 1, 'issues': [FIGURE_REPAIR_AS_NOTE.replace('q3', 'q1')]}])
+        self.assertNotIn('1', job.load_json(self.root / 'mcp/state.json').get('failed_verdicts', {}))
+
+    def test_a_figure_that_is_not_in_the_output_is_still_a_repair(self):
+        result = self.review([{'page': 1, 'status': 'failed', 'issues': ['누락: q1 도형 누락']},
+                              {'page': 2, 'status': 'passed', 'issues': []}])
+        self.assertEqual(result['status'], 'pending_review', result)
+        self.assertEqual(result['reviews']['failed'], [{'page': 1, 'issues': ['누락: q1 도형 누락']}])
+
     def test_changed_page_after_notes_drops_the_frozen_notes(self):
         self.review([{'page': 1, 'status': 'passed_with_notes', 'issues': [FIGURE_NOTE]},
                      {'page': 2, 'status': 'passed', 'issues': []}])
@@ -178,6 +196,54 @@ class IssueTagTests(unittest.TestCase):
         self.assertEqual(single.verdict([]), 'passed')
         self.assertEqual(single.verdict([FIGURE_NOTE, '경미: 간격']), 'passed_with_notes')
         self.assertEqual(single.verdict([FIGURE_NOTE, TEXT_ERROR]), 'failed')
+
+
+class FigureFindingTests(unittest.TestCase):
+    def test_a_difference_inside_a_drawn_figure_becomes_a_note(self):
+        self.assertEqual(single.figure_issues_as_notes([FIGURE_REPAIR], {'q3'}), [FIGURE_REPAIR_AS_NOTE])
+        self.assertEqual(single.verdict(single.figure_issues_as_notes([FIGURE_REPAIR], {'q3'})), 'passed_with_notes')
+        self.assertEqual(single.figure_issues_as_notes(['[오독] Q3 그림의 각 표시가 다름'], {'q3'}), ['도형: Q3 그림의 각 표시가 다름'])
+
+    def test_other_issues_stay_as_written(self):
+        for issue, drawn in ((FIGURE_REPAIR, set()),                                   # the figure is not in the output
+                             ('누락: q3 도형 누락', {'q4'}),
+                             ('누락: 도형에서 반지름 누락', {'q3'}),                    # no question named
+                             ('누락: q3, q4 그림의 반지름 누락', {'q3'}),               # one of the two is not drawn
+                             ('정답: q3 그림과 정답 ③이 맞지 않음', {'q3'}),
+                             ('선지: q3 그림 아래 ④ 누락', {'q3'}),
+                             ('누락: q3 그림 아래 조건 한 줄 누락', {'q3'}),            # body text next to the figure
+                             ('오독: q3 분모 2가 3으로 출력됨', {'q3'}),                # not about a figure
+                             ('q3 도형에서 반지름 누락', {'q3'}),                       # untagged stays a repair
+                             (FIGURE_NOTE, {'q1'})):
+            with self.subTest(issue=issue):
+                self.assertEqual(single.figure_issues_as_notes([issue], drawn), [issue])
+
+    def test_drawn_figures_are_read_from_the_accepted_batch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / 'figures-1'
+            folder.mkdir()
+            (folder / 'q3.png').write_bytes(b'png')
+            job.save_json(folder / 'batch.json', {'items': [
+                {'id': 'q3-figure-1', 'question_id': 'q3', 'png': str(folder / 'q3.png')},
+                {'id': 'q4-figure-1', 'question_id': 'q4', 'png': str(folder / 'missing.png')},
+                {'id': 'q5-figure-1'},
+                {'id': 'q6-figure-1', 'question_id': 'q6', 'png': str(folder / 'q3.png')}]})
+            figure = lambda *ids: [{'kind': 'paragraph', 'figure_ref': i} for i in ids]
+            page = {'questions': [{'id': 'q2', 'content': [{'kind': 'paragraph'}]}] + [
+                {'id': q, 'content': figure(*ids)} for q, ids in (
+                    ('q3', ['q3-figure-1']), ('q4', ['q4-figure-1']), ('q5', ['q5-figure-1']),
+                    ('q6', ['q6-figure-1', 'q6-figure-2']))]}       # the second figure of q6 has no render
+            state = {'figures': {'2': {'path': str(folder / 'figures.json')}, '3': {'path': str(Path(tmp) / 'gone/figures.json')}}}
+            from unittest import mock
+            with mock.patch.object(single, 'reading', return_value=page):
+                self.assertEqual(single.drawn_figure_questions(tmp, state, 2), {'q3'})
+                self.assertEqual(single.drawn_figure_questions(tmp, state, 3), set())
+                self.assertEqual(single.drawn_figure_questions(tmp, state, 1), set())
+                self.assertEqual(single.drawn_figure_questions(tmp, {}, 1), set())
+                self.assertEqual(single.figure_issues_as_notes(['누락: q6 두 번째 그림 누락'], single.drawn_figure_questions(tmp, state, 2)),
+                                 ['누락: q6 두 번째 그림 누락'])
+            with mock.patch.object(single, 'reading', side_effect=ValueError('submit_page_markdown_first')):
+                self.assertEqual(single.drawn_figure_questions(tmp, state, 2), set())
 
 
 if __name__ == '__main__':

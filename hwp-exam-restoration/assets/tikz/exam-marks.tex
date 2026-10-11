@@ -65,18 +65,252 @@
 % Angle mark at vertex B between BA and BC, always the smaller angle whatever the order of A and C.
 % #5 is the printed label ({} for none); [double] doubles the arc, [angle radius=5mm] resizes it,
 % [angle eccentricity=.6] puts a mark such as $\bullet$ or $\times$ inside the arc.
+%
+% Radius: printed arcs follow the figure (7 arcs read on a printed workbook: 2.0 to 3.9 mm, 0.12 to 0.25 of the
+% shorter side, larger for narrow angles); a fixed 3.5 mm was a fifth of the side in a 25 mm figure.
+% Here 0.13 of the shorter arm (0.18 under 50 degrees), between 2.0 and 3.8 mm in print.
+% Label: its own box is placed as near the vertex as it fits, clear of the arc and of both arms, on the bisector
+% when that is enough and otherwise leaning to the arm that leaves more room (a horizontal 31 degree label fits
+% next to its arc beside a horizontal arm, not on the bisector). The old place, a multiple of the radius along
+% the bisector, put narrow labels 7 to 14 mm out, where they read as belonging to another angle.
+% [arrow]: the source prints the value outside the angle with a hooked arrow into it. The label goes beside an
+% arm on the side away from the figure, and the arrow enters the sector through the arc, heading for the vertex.
+% \ExamAutoArrow=1 (the default) does the same on its own for a label that finds no room inside.
+%
+% Value size: a value that stands far from its arc reads as belonging to another angle, and one that finds no
+% room needs an arrow; a slightly smaller value often fits right behind its arc. A printed workbook sets the
+% digits of its angle values smaller than these (1.27 x 2.1 mm a digit against 1.4 x 2.4 mm, a degree sign of
+% 0.55 mm against 1.0 mm) while its point names are as tall as ours (2.4 mm). The fitted document typesets the
+% picture three times (two measuring passes, then the final one), so each pass can use what the pass before
+% found: every angle value reports the largest of the sizes 1, 0.92, 0.85 at which it stands within 4 mm of its
+% arc, and the next pass sets all angle values of the picture at the smallest of them (\ExamTextScale); point
+% names keep their size. No smaller than 0.85, the size of the workbook's digits; a value is not shrunk to stand
+% closer than that (shrunk to 0.8 for 1.5 mm, the values of a figure drawn larger than its source looked tiny).
+% A value that fits at no size does not shrink the others. In the same way each pass knows where the other
+% angle marks of the picture are (\ExamAngleList: x/y/radius).
+% \ExamAutoArrow: a value that finds no room near its arc even at 0.85 is led out with an arrow (1) or left
+% inside its angle where it fits (0).
+\providecommand{\ExamFitScale}{1}
+\providecommand{\ExamAutoArrow}{1}
+\newsavebox\ExamAngleBox
+\newcount\ExamAngleCount
+% Marks set inside an angle (a dot, a cross): a 10 pt bullet is 1.55 mm across, a scanned exam prints dots of
+% 0.7 mm in a 13 mm corner. The mark is sized to the arc radius (0.3 of it across for a bullet, 0.6 to 1.1 mm),
+% and all such marks of one picture take the smallest radius among them (\ExamMarkR, found by the pass
+% before): they say "equal angles", so they must look alike.
+\gdef\ExamTextScale{1}\gdef\ExamTextScaleNext{1}\gdef\ExamAngleList{}\gdef\ExamAngleListNext{}
+\gdef\ExamMarkR{1000}\gdef\ExamMarkRNext{1000}\gdef\ExamTickH{1000}\gdef\ExamTickHNext{1000}
+\tikzset{arrow/.style={},
+  every picture/.append style={execute at begin picture={%
+    \global\let\ExamMarkR\ExamMarkRNext\gdef\ExamMarkRNext{1000}%
+    \global\let\ExamTickH\ExamTickHNext\gdef\ExamTickHNext{1000}%
+    \global\let\ExamTextScale\ExamTextScaleNext\gdef\ExamTextScaleNext{1}%
+    \global\let\ExamAngleList\ExamAngleListNext\gdef\ExamAngleListNext{}}}}
+\makeatletter
 \newcommand{\ExamAngle}[5][]{%
-  \ExamSideOf{#3}{#2}{#4}%
-  % A narrow angle has no room for its label near the vertex: the label moves out along the angle.
-  \path let \p1=(#2),\p2=(#3),\p3=(#4) in
-    \pgfextra{\pgfmathparse{abs(mod(atan2(\y1-\y2,\x1-\x2)-atan2(\y3-\y2,\x3-\x2)+540,360)-180)}%
-      \pgfmathparse{min(4,max(1.7,0.5/tan(max(\pgfmathresult,2)/2)+0.3))}\xdef\ExamEccentricity{\pgfmathresult}};%
-  \ifdim\ExamSide pt>0pt
-    \pic[draw,angle radius=3.5mm,angle eccentricity=\ExamEccentricity,inner sep=1pt,"#5",#1] {angle=#2--#3--#4};%
-  \else
-    \pic[draw,angle radius=3.5mm,angle eccentricity=\ExamEccentricity,inner sep=1pt,"#5",#1] {angle=#4--#3--#2};%
+  \ExamSideOf{#3}{#2}{#4}\edef\exam@order{\ExamSide}%
+  \pgfutil@in@{eccentricity}{#1}%
+  \ifpgfutil@in@\def\exam@own{1}\else\def\exam@own{0}\fi% a mark set inside the arc by the caller keeps the pic's own label
+  % A dot or a cross is a mark whether or not the caller wrote the eccentricity: without it the dot was placed and
+  % sized like a value, 1.5 mm across and outside the arc (a muse run wrote [draw=none]{B}{A}{C}{$\bullet$}).
+  \def\exam@sym{0}%
+  \@for\exam@s:=\bullet,\times,\circ,\triangle,\star,\ast,\diamond,\odot,\otimes\do{%
+    \expandafter\pgfutil@in@\expandafter{\exam@s}{#5}\ifpgfutil@in@\def\exam@sym{1}\fi}%
+  \pgfutil@in@{^}{#5}\ifpgfutil@in@\def\exam@sym{0}\fi
+  \ifnum\exam@sym=1 \def\exam@own{1}\fi
+  \pgfutil@in@{arrow}{#1}%
+  \ifpgfutil@in@\def\exam@arrow{1}\else\def\exam@arrow{0}\fi
+  \def\exam@tag{0}%
+  \sbox\ExamAngleBox{#5}%
+  \path let \p1=(#2),\p2=(#3),\p3=(#4) in \pgfextra{%
+    \pgfmathsetmacro\exam@aa{atan2(\y1-\y2,\x1-\x2)}\pgfmathsetmacro\exam@ab{atan2(\y3-\y2,\x3-\x2)}%
+    \pgfmathsetmacro\exam@sw{mod(\exam@ab-\exam@aa+540,360)-180}%
+    \pgfmathsetmacro\exam@th{max(abs(\exam@sw),2)}\pgfmathsetmacro\exam@sg{\exam@sw<0?-1:1}%
+    \pgfmathsetmacro\exam@arm{min(veclen(\x1-\x2,\y1-\y2),veclen(\x3-\x2,\y3-\y2))*\ExamFitScale}%
+    \pgfmathsetmacro\exam@r{min(10.8,max(5.7,\exam@arm*(\exam@th<50?0.18:0.13)))}%
+    \xdef\ExamAngA{\exam@aa}\xdef\ExamAngB{\exam@ab}\xdef\ExamAngT{\exam@th}\xdef\ExamAngS{\exam@sg}%
+    \pgfmathsetmacro\exam@bx{\x2}\pgfmathsetmacro\exam@by{\y2}\xdef\ExamAngX{\exam@bx}\xdef\ExamAngY{\exam@by}%
+    \pgfmathsetmacro\exam@la{veclen(\x1-\x2,\y1-\y2)*\ExamFitScale}\pgfmathsetmacro\exam@lb{veclen(\x3-\x2,\y3-\y2)*\ExamFitScale}%
+    \xdef\ExamAngLa{\exam@la}\xdef\ExamAngLb{\exam@lb}%
+    \xdef\ExamAngArm{\exam@arm}\xdef\ExamAngR{\exam@r}};%
+  % The caller's own angle radius wins; the label is then placed for that radius.
+  \begingroup\tikzset{angle radius=\ExamAngR pt,#1}\pgfmathsetmacro\exam@r{\pgfkeysvalueof{/tikz/angle radius}}\xdef\ExamAngR{\exam@r}%
+    \pgfmathsetmacro\exam@r{max(.3,\pgfkeysvalueof{/tikz/angle eccentricity})}\xdef\ExamAngE{\exam@r}\endgroup
+  % An angle that holds another angle of the same vertex (60 degrees BAD around 30 degrees CAD): its arc runs
+  % outside the inner one and its value goes into the part the inner angle leaves free. Both on the bisector,
+  % the two values were printed on top of each other. \exam@fa..\exam@fb is the free part, in degrees from arm A.
+  \let\exam@tA\ExamAngA\let\exam@tB\ExamAngB\let\exam@tT\ExamAngT
+  \pgfmathsetmacro\exam@tS{\ExamAngS*\ExamAngT}\def\exam@fa{0}\let\exam@fb\ExamAngT
+  \pgfutil@in@{angle radius}{#1}\ifpgfutil@in@\def\exam@fixed{1}\else\def\exam@fixed{0}\fi
+  % A mark inside the arc: all marks of the picture share the smallest radius, and the mark follows it.
+  \def\exam@ms{1}%
+  \ifnum\exam@own=1
+    \ifnum\exam@sym=1
+      \ifnum\exam@fixed=0
+        \pgfmathparse{min(\ExamMarkRNext,\ExamAngR)}\xdef\ExamMarkRNext{\pgfmathresult}%
+        \ifdim\ExamMarkR pt<999pt \xdef\ExamAngR{\ExamMarkR}\fi
+      \fi
+      \pgfmathsetmacro\exam@ms{min(1,max(.39,\ExamAngR/14.8))}%
+      % In a sharp corner the mark moves out along the bisector until it stands clear of both arms (0.2 mm,
+      % as printed exams leave): two dots either side of a bisector at 0.6 of a small radius ran into one blob.
+      % The size stays the shared one, only the distance grows, to less than half the shorter arm.
+      \ifnum\exam@fixed=0
+        \pgfmathsetmacro\exam@r{max(\ExamAngR,min(.45*\ExamAngArm,(.45*\exam@ms*\strip@pt\wd\ExamAngleBox+.55)/sin(\exam@tT/2))/\ExamAngE)}%
+        \xdef\ExamAngR{\exam@r}%
+      \fi
+    \fi
   \fi
+  \def\exam@nest##1/##2/##3/##4/##5\relax{%
+    \pgfmathsetmacro\exam@p{mod(\ExamAngS*(##4-\exam@tA)+721,360)-1}\pgfmathsetmacro\exam@q{mod(\ExamAngS*(##4+##5-\exam@tA)+721,360)-1}%
+    \pgfmathsetmacro\exam@lo{min(\exam@p,\exam@q)}\pgfmathsetmacro\exam@hi{max(\exam@p,\exam@q)}%
+    \pgfmathtruncatemacro\exam@in{(abs(##1-\ExamAngX)<1 && abs(##2-\ExamAngY)<1 && \exam@hi<\exam@tT+1 && \exam@hi-\exam@lo<\exam@tT-2)?1:0}%
+    \ifnum\exam@in=1
+      \ifnum\exam@fixed=0 \pgfmathsetmacro\exam@r{max(\ExamAngR,##3+3.4)}\xdef\ExamAngR{\exam@r}\fi
+      \pgfmathtruncatemacro\exam@in{(\exam@lo-\exam@fa>=\exam@fb-\exam@hi)?1:0}%
+      \ifnum\exam@in=1 \pgfmathsetmacro\exam@fb{min(\exam@fb,max(\exam@lo,\exam@fa+2))}\else\pgfmathsetmacro\exam@fa{max(\exam@fa,min(\exam@hi,\exam@fb-2))}\fi
+    \fi
+    % The other way round: this angle lies inside that one, so its value also stays clear of that one's arc.
+    \pgfmathsetmacro\exam@p{mod((##5<0?-1:1)*(\exam@tA-(##4))+721,360)-1}\pgfmathsetmacro\exam@q{mod((##5<0?-1:1)*(\exam@tB-(##4))+721,360)-1}%
+    \pgfmathtruncatemacro\exam@in{(abs(##1-\ExamAngX)<1 && abs(##2-\ExamAngY)<1 && abs(##5)>\exam@tT+2 && max(\exam@p,\exam@q)<abs(##5)+1)?1:0}%
+    \ifnum\exam@in=1 \pgfmathsetmacro\exam@rl{max(\exam@rl,##3)}\fi}%
+  \let\exam@rl\ExamAngR
+  \@for\exam@item:=\ExamAngleList\do{\ifx\exam@item\@empty\else\expandafter\exam@nest\exam@item\relax\fi}%
+  \pgfmathsetmacro\exam@rl{max(\exam@rl,\ExamAngR)}%
+  \pgfmathsetmacro\exam@p{\exam@tA+\ExamAngS*\exam@fa}\pgfmathsetmacro\exam@q{\exam@tA+\ExamAngS*\exam@fb}\pgfmathsetmacro\exam@lo{\exam@fb-\exam@fa}%
+  \global\let\ExamAngA\exam@p\global\let\ExamAngB\exam@q\global\let\ExamAngT\exam@lo
+  % How far the value may reach along each arm: the arm's printed length (the shorter one for the edge of an inner angle).
+  \let\exam@ea\ExamAngLa\let\exam@eb\ExamAngLb
+  \ifdim\exam@fa pt>0pt \let\exam@ea\ExamAngArm\fi
+  \ifdim\exam@fb pt<\exam@tT pt \let\exam@eb\ExamAngArm\fi
+  \ifdim\exam@order pt>0pt
+    \ifnum\exam@own=1 \pic[draw,angle radius=\ExamAngR pt,inner sep=1pt,"#5",pic text options={scale=\exam@ms},#1] {angle=#2--#3--#4};%
+    \else \pic[draw,angle radius=\ExamAngR pt,#1] {angle=#2--#3--#4};\fi
+  \else
+    \ifnum\exam@own=1 \pic[draw,angle radius=\ExamAngR pt,inner sep=1pt,"#5",pic text options={scale=\exam@ms},#1] {angle=#4--#3--#2};%
+    \else \pic[draw,angle radius=\ExamAngR pt,#1] {angle=#4--#3--#2};\fi
+  \fi
+  \xdef\ExamAngleListNext{\ExamAngleListNext\ExamAngX/\ExamAngY/\ExamAngR/\exam@tA/\exam@tS,}%
+  \ifnum\exam@own=0 \ifdim\wd\ExamAngleBox>0pt
+    \edef\exam@bw{\strip@pt\wd\ExamAngleBox}\edef\exam@bh{\strip@pt\dimexpr\ht\ExamAngleBox+\dp\ExamAngleBox\relax}%
+    % The nearest place inside the angle for the label at text scale ##1: room each arm asks for (the box's
+    % reach across that arm), on the bisector when that is enough, else leaning to the arm that leaves more.
+    \def\exam@fit##1##2{%
+      \pgfmathsetmacro\exam@hw{.5*\exam@bw*##1+1.5}\pgfmathsetmacro\exam@hh{.5*\exam@bh*##1+1.5}%
+      \pgfmathsetmacro\exam@ka{\exam@hw*abs(sin(\ExamAngA))+\exam@hh*abs(cos(\ExamAngA))}%
+      \pgfmathsetmacro\exam@kb{\exam@hw*abs(sin(\ExamAngB))+\exam@hh*abs(cos(\ExamAngB))}%
+      \pgfmathsetmacro\exam@phi{\ExamAngA+\ExamAngS*\ExamAngT/2}%
+      \pgfmathsetmacro\exam@d{\exam@rl+1+\exam@hw*abs(cos(\exam@phi))+\exam@hh*abs(sin(\exam@phi))}%
+      \pgfmathsetmacro\exam@need{max(\exam@ka,\exam@kb)/sin(\ExamAngT/2)}%
+      \ifdim\exam@need pt>\exam@d pt
+        \pgfmathsetmacro\exam@t{atan2(\exam@ka*sin(\ExamAngT),\exam@kb+\exam@ka*cos(\ExamAngT))}%
+        \pgfmathsetmacro\exam@phi{\ExamAngA+\ExamAngS*\exam@t}%
+        \pgfmathsetmacro\exam@d{max(\exam@ka/sin(max(\exam@t,1)),\exam@rl+1+\exam@hw*abs(cos(\exam@phi))+\exam@hh*abs(sin(\exam@phi)))}%
+      \fi
+      \pgfmathsetmacro\exam@far{\exam@d+\exam@hw*abs(cos(\exam@phi))+\exam@hh*abs(sin(\exam@phi))}%
+      \pgfmathsetmacro\exam@gap{\exam@d-\exam@hw*abs(cos(\exam@phi))-\exam@hh*abs(sin(\exam@phi))-\exam@rl}%
+      % Room: the far edge does not reach past 0.9 of either arm, measured along that arm, and the near edge
+      % stands within ##2 pt of the arc. (Held to 0.8 of the shorter arm, a 31 degree value that lay along the
+      % long base of its angle was thrown out because the other arm was short.)
+      \pgfmathtruncatemacro\exam@out{(\exam@far*cos(\exam@phi-\ExamAngA)>.9*\exam@ea || \exam@far*cos(\exam@phi-\ExamAngB)>.9*\exam@eb)?1:0}%
+      \def\exam@tight{0}%
+      \ifnum\exam@out=1 \def\exam@tight{1}\fi
+      \ifdim\exam@gap pt>##2pt \def\exam@tight{1}\fi}%
+    % The largest size at which the value stands within 4 mm of its arc is reported to the next pass.
+    \def\exam@found{0}%
+    \def\exam@try##1##2{\ifnum\exam@found=0 \exam@fit{##1}{##2}%
+      \ifnum\exam@tight=0 \def\exam@found{1}%
+        \pgfmathparse{min(\ExamTextScaleNext,##1)}\xdef\ExamTextScaleNext{\pgfmathresult}\fi\fi}%
+    \ifnum\exam@arrow=0 \exam@try{1}{11.5}\exam@try{.92}{11.5}\exam@try{.85}{11.5}\fi% a value the source leads out with an arrow asks for nothing
+    \exam@fit{\ExamTextScale}{11.5}%
+    % No room even now: an arrow if allowed. Else the value stays between the arms where it fits, however far
+    % out, or right behind its arc on the bisector when it fits nowhere within the arms.
+    \ifnum\exam@tight=1
+      \ifnum\ExamAutoArrow=1 \def\exam@arrow{1}\fi
+      \ifnum\exam@out=1
+        \pgfmathsetmacro\exam@phi{\ExamAngA+\ExamAngS*\ExamAngT/2}%
+        \pgfmathsetmacro\exam@d{\exam@rl+1+\exam@hw*abs(cos(\exam@phi))+\exam@hh*abs(sin(\exam@phi))}%
+      \fi
+    \fi
+    \global\advance\ExamAngleCount by1\relax
+    \ifnum\exam@arrow=0
+      \node[inner sep=1.5pt,outer sep=0pt,scale=\ExamTextScale] (ExamAng\the\ExamAngleCount) at ($(#3)+(\exam@phi:{\exam@d/\ExamFitScale*1pt})$) {#5};%
+      \ifdefined\ExamNode\edef\exam@tag{\the\ExamNode}\fi
+    \else
+      % The label goes beside one arm, on the side away from the angle. Of the two places the one farther from
+      % the middle of the figure (the mean of its named points) is outside it.
+      \global\let\ExamAngA\exam@tA\global\let\ExamAngB\exam@tB\global\let\ExamAngT\exam@tT\exam@fit{\ExamTextScale}{11.5}% the arrow works on the whole angle
+      \ExamInnerSide{#3}{#2}%
+      \ifdim\exam@count pt>.5pt
+        \pgfmathsetmacro\exam@cx{100*\exam@sx/\exam@count}\pgfmathsetmacro\exam@cy{100*\exam@sy/\exam@count}%
+      \else
+        \path let \p1=(current bounding box.center) in \pgfextra{\pgfmathsetmacro\exam@c{\x1}\xdef\ExamAngU{\exam@c}\pgfmathsetmacro\exam@c{\y1}\xdef\ExamAngV{\exam@c}};%
+        \let\exam@cx\ExamAngU\let\exam@cy\ExamAngV
+      \fi
+      % All lengths from here on are printed pt, measured from the vertex.
+      % The tip meets the arc 12 degrees inside the arm (on the bisector of a narrower angle). The label sits
+      % far enough along its arm that the arrow turns by a quarter circle at most: it then lies out along the
+      % radius the arrow comes in on, not beside the tip (beside the tip the arrow had to turn back on itself).
+      % At most 0.75 of that arm and 2.6 radii: farther out the value read as belonging to another angle.
+      % An arm too short for that distance loses to the other one: the label would end up at the arm's far end,
+      % on the name of the point there (a 75 degree value landed on "B"). A place within reach of another
+      % angle's arc loses outright.
+      \pgfmathsetmacro\exam@eps{min(\ExamAngT/2,12)}%
+      \def\exam@other##1/##2/##3/##4/##5\relax{% another angle mark of the picture: is the label at (\exam@ux,\exam@uy) on it?
+        \pgfmathparse{(abs(##1-\ExamAngX)<1 && abs(##2-\ExamAngY)<1)?0:((veclen(\ExamAngX+\exam@ux/\ExamFitScale-##1,\ExamAngY+\exam@uy/\ExamFitScale-##2)*\ExamFitScale<##3+veclen(\exam@hw,\exam@hh)+3)?2000:0)}%
+        \pgfmathsetmacro\exam@room{\exam@room-\pgfmathresult}}%
+      \def\exam@place##1##2##3##4{% arm direction, the label's reach across it, its printed length, turn towards the angle
+        \pgfmathsetmacro\exam@want{(\ExamAngR+(##2+2.5)*(sin(\exam@eps)+cos(\exam@eps)))/(cos(\exam@eps)-sin(\exam@eps))}%
+        \pgfmathsetmacro\exam@room{\exam@want>.75*##3?0:1000}%
+        \pgfmathsetmacro\exam@s{max(1.7*\ExamAngR,min(\exam@want,.75*##3,2.6*\ExamAngR))}%
+        \pgfmathsetmacro\exam@ux{\exam@s*cos(##1)+(##2+2.5)*cos(##1-(##4)*90)}%
+        \pgfmathsetmacro\exam@uy{\exam@s*sin(##1)+(##2+2.5)*sin(##1-(##4)*90)}%
+        \@for\exam@item:=\ExamAngleList\do{\ifx\exam@item\@empty\else\expandafter\exam@other\exam@item\relax\fi}}%
+      \exam@place{\ExamAngA}{\exam@ka}{\ExamAngLa}{\ExamAngS}\let\exam@lx\exam@ux\let\exam@ly\exam@uy\let\exam@ra\exam@room
+      \exam@place{\ExamAngB}{\exam@kb}{\ExamAngLb}{0-\ExamAngS}%
+      \pgfmathsetmacro\exam@qa{\exam@ra+veclen(\ExamAngX+\exam@lx/\ExamFitScale-\exam@cx,\ExamAngY+\exam@ly/\ExamFitScale-\exam@cy)}%
+      \pgfmathsetmacro\exam@qb{\exam@room+veclen(\ExamAngX+\exam@ux/\ExamFitScale-\exam@cx,\ExamAngY+\exam@uy/\ExamFitScale-\exam@cy)}%
+      \ifdim\exam@qa pt<\exam@qb pt
+        \let\exam@a\ExamAngB\let\exam@lx\exam@ux\let\exam@ly\exam@uy\pgfmathsetmacro\exam@in{0-\ExamAngS}%
+      \else
+        \let\exam@a\ExamAngA\pgfmathsetmacro\exam@in{\ExamAngS}%
+      \fi
+      % The arrow points at the arc, not at the vertex: its tip stops on the arc, coming in along a radius.
+      % It is one round bend, as near a circular arc as a quadratic curve gets: its control point lies on that
+      % radius where the two tangents are equally long, so the bend is spread evenly and is gentlest at both
+      % ends (a control point near the tip bent the arrow sharply right at its head; an out/in curve went down,
+      % across and hooked back). The value sits on the end of the tail: the arrow starts where the line from
+      % the middle of its digits to the control point leaves them (a degree sign is left out of that box: the
+      % corner under it is empty, and an arrow starting there looked detached from its value).
+      \pgfmathsetmacro\exam@e{\exam@a+\exam@in*\exam@eps}%
+      \pgfmathsetmacro\exam@tx{\ExamAngR*cos(\exam@e)}\pgfmathsetmacro\exam@ty{\ExamAngR*sin(\exam@e)}%
+      \pgfutil@in@{\circ}{#5}\ifpgfutil@in@\pgfmathsetmacro\exam@deg{2.3*\ExamTextScale}\else\def\exam@deg{0}\fi
+      \pgfmathsetmacro\exam@gx{\exam@lx-\exam@deg}\let\exam@gy\exam@ly
+      \pgfmathsetmacro\exam@ga{\exam@hw-.7-\exam@deg}\pgfmathsetmacro\exam@gb{\exam@hh-.7}%
+      \let\exam@sx\exam@gx\let\exam@sy\exam@gy
+      \def\exam@bend{%
+        \pgfmathsetmacro\exam@len{veclen(\exam@sx-\exam@tx,\exam@sy-\exam@ty)}%
+        \pgfmathsetmacro\exam@prj{(\exam@sx-\exam@tx)*cos(\exam@e)+(\exam@sy-\exam@ty)*sin(\exam@e)}%
+        \pgfmathsetmacro\exam@lam{\exam@prj>.2*\exam@len?min(\exam@len/(2*\exam@prj)*\exam@len,2.5*\exam@len):2.5*\exam@len}%
+        \pgfmathsetmacro\exam@px{\exam@tx+\exam@lam*cos(\exam@e)}\pgfmathsetmacro\exam@py{\exam@ty+\exam@lam*sin(\exam@e)}%
+        \pgfmathsetmacro\exam@t{min(\exam@ga/max(abs(\exam@px-\exam@gx),.01),\exam@gb/max(abs(\exam@py-\exam@gy),.01))}%
+        \pgfmathsetmacro\exam@sx{\exam@gx+\exam@t*(\exam@px-\exam@gx)}\pgfmathsetmacro\exam@sy{\exam@gy+\exam@t*(\exam@py-\exam@gy)}}%
+      \exam@bend\exam@bend
+      \pgfmathsetmacro\exam@nx{\exam@lx/\ExamFitScale}\pgfmathsetmacro\exam@ny{\exam@ly/\ExamFitScale}%
+      \pgfmathsetmacro\exam@ox{(\exam@sx-\exam@lx)/\ExamFitScale}\pgfmathsetmacro\exam@oy{(\exam@sy-\exam@ly)/\ExamFitScale}%
+      \pgfmathsetmacro\exam@vx{(\exam@sx+(\exam@px-\exam@sx)/1.5-\exam@lx)/\ExamFitScale}%
+      \pgfmathsetmacro\exam@vy{(\exam@sy+(\exam@py-\exam@sy)/1.5-\exam@ly)/\ExamFitScale}%
+      \pgfmathsetmacro\exam@w{(\ExamAngR+\exam@lam/1.5)/\ExamFitScale}\pgfmathsetmacro\exam@tip{\ExamAngR/\ExamFitScale}%
+      \node[inner sep=1pt,outer sep=0pt,scale=\ExamTextScale] (ExamAng\the\ExamAngleCount) at ($(#3)+(\exam@nx pt,\exam@ny pt)$) {#5};%
+      \ifdefined\ExamNode\edef\exam@tag{\the\ExamNode}\fi
+      \draw[line width=.3pt,-{Stealth[length=1.2mm,width=.9mm]}] ($(ExamAng\the\ExamAngleCount.center)+(\exam@ox pt,\exam@oy pt)$)
+        .. controls ($(ExamAng\the\ExamAngleCount.center)+(\exam@vx pt,\exam@vy pt)$)
+        and ($(#3)+(\exam@e:\exam@w pt)$) .. ($(#3)+(\exam@e:\exam@tip pt)$);%
+    \fi
+  \fi\fi
+  % For the engine's label mover: which node is this angle's value (0: none), its vertex, radius and span.
+  \ifdefined\ExamNode\typeout{EXAMANGLE \exam@tag:\ExamAngX,\ExamAngY,\ExamAngR,\exam@tA,\exam@tS,\exam@arrow}\fi
 }
+\makeatother
 
 % Explicit placement, not an automatic collision solver. Never hides lines.
 \newcommand{\ExamLabel}[3][above right]{%
@@ -84,7 +318,17 @@
 }
 
 % Midpoint ticks in the local direction of AB; does not draw the segment.
+% Size: printed ticks are 1.4 mm long and 0.45 mm apart on a 27 mm side (workbook) and about 1.7 mm long on
+% an 8 mm side (scanned exam): nearly one size whatever the segment. A tick is 0.05 of its segment long but
+% between 1.3 and 1.7 mm, and the ticks of a group stand 0.4 of that apart (the fixed 0.78 mm between 1.27 mm
+% ticks was wider than either source prints). All ticks of one picture take the size of the shortest ticked
+% segment (\ExamTickH, half a tick in pt, found by the pass before).
 \newcommand{\ExamTicks}[4][]{%
+  \path let \p1=($(#3)-(#2)$), \n1={veclen(\x1,\y1)} in
+    \pgfextra{\pgfmathparse{min(2.4,max(1.85,.025*\n1*\ExamFitScale))}\xdef\ExamTickOwn{\pgfmathresult}};%
+  \pgfmathparse{min(\ExamTickHNext,\ExamTickOwn)}\xdef\ExamTickHNext{\pgfmathresult}%
+  \ifdim\ExamTickH pt<999pt \xdef\ExamTickOwn{\ExamTickH}\fi
+  \pgfmathparse{.8*\ExamTickOwn}\xdef\ExamTickGap{\pgfmathresult}%
   \begingroup
   \ifnum#4<1\relax
     \PackageError{exam-marks}{ExamTicks count must be 1, 2 or 3}{Use one of these counts.}%
@@ -95,8 +339,8 @@
       mark=at position .5 with {%
         \foreach \ExamTickIndex in {1,...,#4}{%
           \draw[line width=.4pt,#1]
-            ({(\ExamTickIndex-(#4+1)/2)*2.2pt},-1.8pt) --
-            ({(\ExamTickIndex-(#4+1)/2)*2.2pt},1.8pt);%
+            ({(\ExamTickIndex-(#4+1)/2)*\ExamTickGap*1pt},-\ExamTickOwn pt) --
+            ({(\ExamTickIndex-(#4+1)/2)*\ExamTickGap*1pt},\ExamTickOwn pt);%
         }%
       }}] (#2)--(#3);%
   \fi\fi

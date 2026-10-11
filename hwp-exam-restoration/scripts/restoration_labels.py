@@ -7,6 +7,7 @@ marks and other labels; a crossed label is moved to the nearest free spot within
 the figure is rendered once more with the shift table. A move never
 - carries a label nearer to another vertex than to its own,
 - crosses a stroke that does not already run through the middle of the label (an angle value stays inside its angle),
+- takes an angle value away from its own arc or up to another angle's mark (the marks are logged by the angle command),
 - touches symbol-only nodes (angle dots, crosses), long text or framed nodes.
 Labels that cannot be freed are reported so the producer hears about them once.
 """
@@ -23,6 +24,7 @@ RADII_MM = (0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0)
 DIRECTIONS = 16
 TRAVEL = 0.08               # cost per mm moved: the nearest free spot wins
 OWNER_REACH_MM = 3.5        # a label this close to a vertex names that vertex
+ANGLE_REACH_MM = 2.5        # a moved angle value ends no farther than this from its own arc
 CORE_SHARE = 0.25           # a stroke outside the middle half of a label leaves the label on one side of it
 MAX_LABEL_MM = 15.0         # wider text is a caption, not a point label
 RULE_MM = 0.25              # filled rules this thin are the bars of \sqrt and \frac (0.4pt = 0.14mm)
@@ -84,8 +86,9 @@ def _tight_glyphs():
         finally: fitz.TOOLS.set_small_glyph_heights(bool(before))
 
 
-def logged(pdf, border_pt=2):
-    """Node boxes and named points of the final picture in PDF mm (y down), read from the render log.
+def logged(pdf, border_pt=2, marks=None):
+    """Node boxes and named points of the final picture in PDF mm (y down), read from the render log; the angle
+    marks drawn by the angle command are added to marks.
     Logged values are in the picture's own units before the fit scale, so the page width gives the scale."""
     import fitz
     log = Path(pdf).with_name('compile.log').read_text(encoding='utf-8', errors='replace')
@@ -97,7 +100,11 @@ def logged(pdf, border_pt=2):
     if bb[2] - bb[0] <= 0: return {}, {}
     k = (width - 2 * border) / ((bb[2] - bb[0]) * PT_MM)
     def at(x, y): return ((x - bb[0]) * PT_MM * k + border, (bb[3] - y) * PT_MM * k + border)
-    nodes, points = {}, {}
+    nodes, points = {}, {}; marks = [] if marks is None else marks
+    for n, v in re.findall(r'EXAMANGLE (\d+):(\S+)', body):
+        x, y, r, start, sweep, arrow = (float(t) for t in v.split(','))
+        # TikZ angles run counter-clockwise with y up; the PDF's y runs down.
+        marks.append({'node': int(n), 'c': at(x, y), 'r': r * PT_MM, 'start': -math.radians(start), 'sweep': -math.radians(sweep), 'arrow': arrow > 0})
     for n, v in re.findall(r'EXAMNODE (\d+):(\S+)', body):
         x0, y0, x1, y1 = (float(t[:-2]) for t in v.split(','))
         (ax, by), (bx, ay) = at(x0, y0), at(x1, y1)
@@ -106,6 +113,19 @@ def logged(pdf, border_pt=2):
         x, y = (float(t[:-2]) for t in v.split(','))
         points[name] = at(x, y)
     return nodes, points
+
+
+# Angle marks are dicts: node (0 without a value), c, r, start, sweep (PDF mm, radians, y down), arrow.
+
+
+def _arc_points(mark, inside=False):
+    """Points along an angle mark's arc; with inside, of its whole sector."""
+    def ring(r, n): return [(mark['c'][0] + r * math.cos(mark['start'] + mark['sweep'] * k / n), mark['c'][1] + r * math.sin(mark['start'] + mark['sweep'] * k / n)) for k in range(n + 1)]
+    return ring(mark['r'], 16) + (ring(.5 * mark['r'], 8) + [mark['c']] if inside else [])
+
+
+def _gap(box, pts):
+    return min(math.hypot(max(box[0] - x, 0, x - box[2]), max(box[1] - y, 0, y - box[3])) for x, y in pts)
 
 
 def points(pdf):
@@ -211,7 +231,7 @@ def labels(pdf):
     """Strokes of the figure and, per text node, the ink box of its glyphs."""
     import fitz
     from restoration_figure_geometry import extract
-    nodes, _ = logged(pdf)
+    angles = []; nodes, _ = logged(pdf, marks=angles)
     with _tight_glyphs():
         geo = extract(pdf)
         fills, rules = [], []
@@ -223,6 +243,7 @@ def labels(pdf):
                 elif min(r.width, r.height) * BP_MM <= RULE_MM: rules.append(f)
     # A small white backing is paper and a short TeX rule is a radical or fraction bar: neither is a point mark.
     geo['marks'] = [m for m in geo['marks'] if not any(math.dist(m, _centre(f)) < .1 for f in fills + rules)]
+    geo['angles'] = angles
     owned = _owners(geo['glyphs'], nodes)
     found = {}
     for n, box in nodes.items():
@@ -272,10 +293,13 @@ def solve(geo, found):
     drawing differs from the source (the producer draws the arrows the source prints)."""
     vertices = [s['p'] for s in geo['segments']] + [s['q'] for s in geo['segments']] + list(geo['marks'])
     boxes = {n: l['ink'] for n, l in found.items()}; shifts = {}
+    angles = geo.get('angles', []); valued = {m['node']: m for m in angles if m['node']}
     for n, l in found.items():
         others = [b for m, b in boxes.items() if m != n]; box = boxes[n]
         base = _cost(box, geo, l['backed'], others, MARGIN_MM)
         if base < TOUCH: continue
+        # The angle command sets its value close between the arms on purpose: only one really crossed is moved.
+        if n in valued and _cost(box, geo, l['backed'], others, 0) <= CLEAR: continue
         c0 = _centre(box)
         owner = min(vertices, key=lambda v: math.dist(c0, v), default=None)
         if owner is not None and math.dist(c0, owner) > OWNER_REACH_MM: owner = None
@@ -283,7 +307,17 @@ def solve(geo, found):
         # an edge has: an angle value squeezed between its two sides must not leave the angle.
         core = _grow(box, -CORE_SHARE * min(box[2] - box[0], box[3] - box[1]))
         # An angle value belongs to the region it is printed in: it never changes side of a line, only of its arc.
-        angle = l['text'][-1:] in '°◦' and l['text'][:-1].replace('.', '').isalnum()
+        mark = valued.get(n)
+        angle = mark is not None or (l['text'][-1:] in '°◦' and l['text'][:-1].replace('.', '').isalnum())
+        # A value of the angle command stays by its own arc and does not go up to another angle's mark: moved
+        # 4 mm along its angle, a 30 degree value stood next to the mark of the angle at the far end.
+        if mark:
+            arc = _arc_points(mark); reach = max(_gap(box, arc), ANGLE_REACH_MM)
+            rivals = [(s, _gap(box, s)) for s in (_arc_points(m, True) for m in angles if m is not mark and m['r'] > 0)]
+            # Nor does it go onto a line to get clear of another label: pushed off an 80 degree value that it
+            # only touched, a 20 degree value ended up across the arm of its own angle. Judged on the middle of
+            # the label: the ink box reaches above the digits for signs and takes a line just over them for a hit.
+            inner = CORE_SHARE * min(box[2] - box[0], box[3] - box[1]); struck = _cost(_grow(box, -inner), geo, l['backed'], [], 0)
         clear_segments = [s for s in geo['segments'] if not s['symbol'] and (angle or _clip(s['p'], s['q'], core) == 0)]
         clear_arcs = [a for a in geo['arcs'] if _arc_in(a, core) == 0]
         best = (base, 0.0, 0.0)
@@ -296,6 +330,11 @@ def solve(geo, found):
                 dx, dy = r * math.cos(k * 2 * math.pi / DIRECTIONS), r * math.sin(k * 2 * math.pi / DIRECTIONS)
                 moved = (box[0] + dx, box[1] + dy, box[2] + dx, box[3] + dy); c1 = _centre(moved)
                 if _crosses(c0, c1, clear_segments, clear_arcs): continue
+                if mark:
+                    own = _gap(moved, arc)
+                    if not mark['arrow'] and own > reach + 1e-9: continue
+                    if any(_gap(moved, s) < min(own, before) - 1e-9 for s, before in rivals): continue
+                    if _cost(_grow(moved, -inner), geo, l['backed'], [], 0) > struck + CLEAR: continue
                 if owner is not None:
                     d = math.dist(c1, owner)
                     if any(math.dist(c1, v) < .9 * d for v in vertices if math.dist(v, owner) > 1.0): continue
