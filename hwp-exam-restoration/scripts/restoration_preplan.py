@@ -9,6 +9,7 @@ room even after CERTAIN_SHARE of the estimate, so pages that fitted before keep 
 (calibration: est/measured over 1,000 exported cells, see the constants)."""
 import math
 import re
+from question_flow import FIGURE_AFTER_MM
 
 PT_MM = 25.4 / 72
 WIDE_EM, NARROW_EM, SPACE_EM = 1.0, 0.55, 0.3   # Hangul and symbols, Latin letters and digits, spaces
@@ -58,9 +59,11 @@ def content_height_mm(blocks, q, width):
             has_text = any(r['kind'] in ('equation', 'boxed_text') or (r['kind'] == 'text' and r['text'].strip()) for r in block['runs'])
             if not figure: total += before + _text_height(block['runs'], block, q, width) + after
             else:
-                # question_flow.contents: the text paragraph, then an anchor line reserving the picture's extent
+                # question_flow.contents: the text paragraph, then a line holding the picture as a character. That
+                # line is as tall as the picture and its line spacing is counted on the font, not on the picture.
                 if has_text: total += before + _text_height(block['runs'], block, q, width)
-                total += (0 if has_text else before) + line + max(after, figure['offset_mm'][1] + figure['size_mm'][1] + 1)
+                total += ((0 if has_text else before) + figure['offset_mm'][1] + max(figure['size_mm'][1], pt * PT_MM)
+                          + line - pt * PT_MM + max(after, FIGURE_AFTER_MM))
         elif kind == 'choices':
             rows = 0
             for row in block['rows']:

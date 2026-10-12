@@ -17,7 +17,7 @@ description: Restore the printed questions of a scanned mathematics exam into ed
 
 **HWP 출력은 연결된 MCP만 사용한다.** 직접 한글·COM·UI·CLI·임시 클라이언트를 실행하지 않는다. 관련 `hwp-automation`, `scan-restoration`, `diagram-restoration`의 예전 JSON/좌표/직접 렌더 절차를 이 작업에 합치지 않는다. MCP가 없거나 연결이 실패하면 재연결 필요를 보고하며 서버 실행법·설정·로그를 조사하지 않는다.
 
-첫 `hwp_prepare`의 `runtime_version`은 **2.8.1**이어야 한다. 다르면 배정 전에 재연결을 요청한다. 중단·rewind 후 같은 job으로 `hwp_prepare`를 부르면 `already_assigned`가 온다. `continue_with=hwp_build`이면 모든 쪽이 끝난 것이니 그 job에서 바로 빌드하고, 아니면 반환된 재시작 경로에 새 job을 만든다. 옛 배정/출력은 지우지 않는다. 정상 대기는 호스트 완료 알림을 쓰며 반복 폴링하지 않는다. 스킬 개발 요청에는 시험지 OCR을 시작하지 않는다. [설치 안내](references/installation.md)는 설치 요청 때만 읽는다.
+첫 `hwp_prepare`의 `runtime_version`은 **2.8.2**여야 한다. 다르면 배정 전에 재연결을 요청한다. 중단·rewind 후 같은 job으로 `hwp_prepare`를 부르면 `already_assigned`가 온다. `continue_with=hwp_build`이면 모든 쪽이 끝난 것이니 그 job에서 바로 빌드하고, 아니면 반환된 재시작 경로에 새 job을 만든다. 옛 배정/출력은 지우지 않는다. 정상 대기는 호스트 완료 알림을 쓰며 반복 폴링하지 않는다. 스킬 개발 요청에는 시험지 OCR을 시작하지 않는다. [설치 안내](references/installation.md)는 설치 요청 때만 읽는다.
 
 ## MCP 절차
 

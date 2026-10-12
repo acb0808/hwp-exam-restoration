@@ -11,7 +11,8 @@ HP='{http://www.hancom.co.kr/hwpml/2011/paragraph}'
 def content_height(cell,lines):
     """(height in HWPUNIT, continued) of a question cell's content.
     A cell pushed past the page bottom is continued on the next page and its line positions start again from 0
-    there, so the parts are added up and the cell is reported as continued. A figure floats over the space its
+    there, so the parts are added up and the cell is reported as continued. A figure set like a character
+    is in its line's height. A floating one (jobs built before figures went inline) hangs over the space its
     anchor paragraph reserves below itself, which no line records, so its bottom edge counts as content too."""
     top=max(int(n.get('vertpos','0'))+int(n.get('vertsize','0')) for n in lines)
     sub=cell.find(HP+'subList');total=part=0;previous=-1;continued=False

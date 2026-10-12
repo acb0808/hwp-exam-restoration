@@ -80,14 +80,14 @@ class EfficiencyTests(unittest.TestCase):
             (base/'drawing.tex').write_text('tampered')
             with self.assertRaisesRegex(ValueError,'hash_mismatch'):job.figure_info(root,1,'q1',base/'render.json',width_mm=40)
 
-    def test_picture_is_separate_and_height_is_reserved(self):
+    def test_picture_is_a_character_in_its_own_paragraph(self):
         from restoration_compiler import build_hwpx
         from unittest.mock import patch
         from PIL import Image
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);png=root/'image.png';Image.new('RGB',(80,40),'white').save(png)
             page=flow.QuestionFlowTests().page();b=page['questions'][0]['content'][0]
-            b['figure']={'path':str(png),'sha256':job.digest(png),'size_mm':[40,20],'offset_mm':[0,0]}
+            b['figure']={'path':str(png),'sha256':job.digest(png),'size_mm':[40,20],'offset_mm':[3,2]}
             # Only provenance is mocked: this test isolates native layout mechanics.
             with patch('figure_provenance.validate_figures',return_value=[]):build_hwpx([page],root/'out.hwpx')
             with zipfile.ZipFile(root/'out.hwpx')as z:
@@ -97,8 +97,21 @@ class EfficiencyTests(unittest.TestCase):
             self.assertNotIn('문장',''.join(paras[0].itertext()))
             hh='{http://www.hancom.co.kr/hwpml/2011/head}'
             style=next(p for p in header.iter(hh+'paraPr')if p.get('id')==paras[0].get('paraPrIDRef'))
-            gap=next(n for n in style.iter() if n.tag.endswith('}next'))
-            self.assertGreaterEqual(int(gap.get('value')),round(20*7200/25.4))
+            # 글자처럼 취급: the line is as tall as the picture, so the paragraph reserves no room for it. The
+            # figure's offset is the paragraph's left margin and space before.
+            picture=paras[0].find('./'+HP+'run/'+HP+'pic');place=picture.find(HP+'pos')
+            self.assertEqual(picture.get('textWrap'),'TOP_AND_BOTTOM')
+            self.assertEqual({k:place.get(k) for k in ('treatAsChar','vertRelTo','horzRelTo','vertOffset','horzOffset')},
+                             {'treatAsChar':'1','vertRelTo':'PARA','horzRelTo':'PARA','vertOffset':'0','horzOffset':'0'})
+            self.assertEqual(picture.find(HP+'sz').get('height'),str(round(20*7200/25.4)))
+            self.assertIsNotNone(paras[0].find('./'+HP+'run/'+HP+'t'))
+            value=lambda name:int(next(n for n in style.iter() if n.tag.endswith('}'+name)).get('value'))
+            self.assertLess(value('next'),round(20*7200/25.4))
+            self.assertGreaterEqual(value('next'),round(1*7200/25.4))
+            self.assertEqual(value('left'),round(3*7200/25.4))
+            self.assertEqual(value('intent'),0)
+            self.assertGreaterEqual(value('prev'),round(2*7200/25.4))
+            self.assertEqual(next(n for n in style.iter() if n.tag.endswith('}align')).get('horizontal'),'LEFT')
 
     def test_batch_assignment_rejects_reused_worker_without_partial_assignment(self):
         self.assertTrue(hasattr(job,'assign_many'),'batch assignment is missing')

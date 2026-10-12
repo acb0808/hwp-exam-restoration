@@ -8,6 +8,7 @@ HP='http://www.hancom.co.kr/hwpml/2011/paragraph'
 HH='http://www.hancom.co.kr/hwpml/2011/head'
 HC='http://www.hancom.co.kr/hwpml/2011/core'
 def mm(v):return round(v*7200/25.4)
+FIGURE_AFTER_MM=1  # least space under a figure's line (restoration_preplan estimates with the same value)
 
 class QuestionFlow:
     def __init__(self,header,builder,char,equation,position,base_para,transparent,profile=None):
@@ -80,13 +81,16 @@ class QuestionFlow:
             elif name.endswith('Border') or name=='diagonal':c.attrib.update(type='SOLID' if name.removesuffix('Border') in sides else 'NONE',width=f'{stroke} mm',color='#000000')
         self.fills.append(n);return ident
     def picture(self,figure):
+        """A question's figure, set in its own line like a character (글자처럼 취급): the line is as tall as the
+        picture, so nothing has to reserve its room, and it moves with the text when the document is edited.
+        Its place (figure offset_mm) is the paragraph's left margin and space before, see contents."""
         p=Path(figure['path']);assert hashlib.sha256(p.read_bytes()).hexdigest()==figure['sha256'],'figure_hash_changed'
-        w,h=figure['size_mm'];x,y=figure['offset_mm']
+        w,h=figure['size_mm']
         self.b.add_picture(p,width_hwpunit=mm(w),height_hwpunit=mm(h));raw=self.b.elements.pop()
         raw=raw[raw.index('<hp:pic'):raw.index('</hp:pic>')+len('</hp:pic>')]
         position=(f'<hp:sz width="{mm(w)}" height="{mm(h)}" widthRelTo="ABSOLUTE" heightRelTo="ABSOLUTE" protect="1"/>'
-            f'<hp:pos treatAsChar="0" affectLSpacing="0" flowWithText="1" allowOverlap="1" holdAnchorAndSO="1" vertRelTo="PARA" horzRelTo="COLUMN" vertAlign="TOP" horzAlign="LEFT" vertOffset="{mm(y)}" horzOffset="{mm(x)}"/><hp:outMargin left="0" right="0" top="0" bottom="0"/>')
-        return re.sub(r'<hp:sz\b[^>]*/>.*?<hp:outMargin\b[^>]*/>',lambda _:position,raw,flags=re.S).replace('textWrap="TOP_AND_BOTTOM"','textWrap="IN_FRONT_OF_TEXT"')
+            '<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="1" holdAnchorAndSO="1" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/><hp:outMargin left="0" right="0" top="0" bottom="0"/>')
+        return re.sub(r'<hp:sz\b[^>]*/>.*?<hp:outMargin\b[^>]*/>',lambda _:position,raw,flags=re.S)
     def inline_picture(self,image):
         """A picture set in the line like a character (검수 노트 rows), so its table cell grows with it."""
         p=Path(image['path']);assert hashlib.sha256(p.read_bytes()).hexdigest()==image['sha256'],'note_image_changed'
@@ -106,11 +110,12 @@ class QuestionFlow:
                 else:
                     has_text=any(r['kind'] in ('equation','boxed_text') or (r['kind']=='text' and r['text'].strip()) for r in block['runs'])
                     if has_text:out.append(self.paragraph(inner,self.style(dict(block,after_mm=0)),cid))
-                    # A floating image needs a dedicated anchor and space for its
-                    # full extent. Never position it over the preceding text.
-                    options=dict(block,before_mm=0 if has_text else block.get('before_mm',0),
-                        after_mm=max(block.get('after_mm',0),figure['offset_mm'][1]+figure['size_mm'][1]+1))
-                    picture=f'<hp:run charPrIDRef="{cid}">'+self.picture(figure)+'</hp:run>'
+                    # The picture is the only character of its own paragraph, at the column's left edge plus
+                    # its offset whatever the text's indent is.
+                    x,y=figure['offset_mm']
+                    options=dict(block,align='LEFT',left_mm=x,indent_mm=0,
+                        before_mm=y+(0 if has_text else block.get('before_mm',0)),after_mm=max(block.get('after_mm',0),FIGURE_AFTER_MM))
+                    picture=f'<hp:run charPrIDRef="{cid}">'+self.picture(figure)+'<hp:t/></hp:run>'
                     out.append(self.paragraph(picture,self.style(options),cid))
             elif kind=='choices':
                 span=(width-block.get('left_mm',0)-block.get('right_mm',0))/block['columns']

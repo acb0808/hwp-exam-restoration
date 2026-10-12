@@ -30,7 +30,7 @@ def subagent_type(name):
         if (Path.home()/'.gemini/config/agents'/f'{name}.md').read_bytes()==(shared.SKILL/'agents'/f'{name}.md').read_bytes():return name
     except OSError:pass
     return 'self'
-RUNTIME_VERSION='2.8.1'  # Loaded code version, never read from a replaced manifest.
+RUNTIME_VERSION='2.8.2'  # Loaded code version, never read from a replaced manifest.
 TIKZ_HELPERS=shared.SKILL/'assets/tikz/exam-marks.tex'
 
 
