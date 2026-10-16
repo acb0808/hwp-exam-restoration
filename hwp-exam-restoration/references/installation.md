@@ -14,9 +14,9 @@ v2.7.3 설치본은 보통 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restora
 
 v2.7.3부터 v2.7.9까지 `requirements.txt` 및 `requirements-mcp.txt` 내용은 같고, v2.8.0에서 `numpy` 하나가 늘었다. 기존 설치 폴더를 교체하는 경우 `.mcp-venv`를 유지하고 그 안에서 `pip install -r requirements-mcp.txt`를 한 번 더 실행한다. numpy는 원본 쪽에서 도형 영역을 다시 찾는 데만 쓰이며, 없어도 복원은 동작한다(제작자가 적은 영역을 그대로 쓴다). 새 경로로 옮기는 경우 기존 가상환경은 백업에 남겨두고, 절대 경로가 새 설치 위치에 맞도록 새 `.mcp-venv`를 만든다.
 
-Antigravity가 `%USERPROFILE%\.agents\skills`를 검색한다고 확인된 경우에만 v2.8.2를 그곳에 설치한다. 기존 스킬과 MCP 설정의 백업을 검색 경로 밖에 보관한 채, 이전 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration` 폴더를 검색 경로에서 제거해 활성 사본을 하나만 둔다. 새 폴더에서 `.mcp-venv`를 만들고 그 위치에서 등록기를 실행해 MCP 서버 경로를 바꾼 다음 앱을 재시작·재연결한다. 새 위치의 스킬이 선택되고 서버가 연결됐는지 확인한다. 새 위치가 작동하지 않으면 백업을 복구하고 확인된 기존 위치를 교체한다.
+Antigravity가 `%USERPROFILE%\.agents\skills`를 검색한다고 확인된 경우에만 v2.8.3를 그곳에 설치한다. 기존 스킬과 MCP 설정의 백업을 검색 경로 밖에 보관한 채, 이전 `%USERPROFILE%\.gemini\config\skills\hwp-exam-restoration` 폴더를 검색 경로에서 제거해 활성 사본을 하나만 둔다. 새 폴더에서 `.mcp-venv`를 만들고 그 위치에서 등록기를 실행해 MCP 서버 경로를 바꾼 다음 앱을 재시작·재연결한다. 새 위치의 스킬이 선택되고 서버가 연결됐는지 확인한다. 새 위치가 작동하지 않으면 백업을 복구하고 확인된 기존 위치를 교체한다.
 
-새 경로가 검색되는지 확인할 수 없다면 두 번째 위치를 추가하지 않는다. 실제로 검색되는 기존 폴더를 백업하고 v2.8.2 전체 폴더로 교체한 뒤, 그 위치에서 MCP를 다시 등록한다. 검색 가능한 곳에 두 버전의 복사본을 함께 두지 않는다. 사용자 job·원본·결과물은 스킬 설치 폴더와 별도로 보존한다. 설치만 진행할 때는 시험지를 열지 않으며, 다음 복원 작업에서 첫 MCP 응답의 `runtime_version=2.8.2`를 확인한다.
+새 경로가 검색되는지 확인할 수 없다면 두 번째 위치를 추가하지 않는다. 실제로 검색되는 기존 폴더를 백업하고 v2.8.3 전체 폴더로 교체한 뒤, 그 위치에서 MCP를 다시 등록한다. 검색 가능한 곳에 두 버전의 복사본을 함께 두지 않는다. 사용자 job·원본·결과물은 스킬 설치 폴더와 별도로 보존한다. 설치만 진행할 때는 시험지를 열지 않으며, 다음 복원 작업에서 첫 MCP 응답의 `runtime_version=2.8.3`를 확인한다.
 
 ## Python 환경
 
@@ -29,6 +29,20 @@ py -3.12 -m venv .venv
 ```
 
 다른 PC의 `.venv`를 복사하지 말고 새로 만든다. 아래 설치 명령의 PYTHON은 전용 가상환경 인터프리터다. 복원 작업의 실행은 연결된 MCP만 사용한다. 작업 결과는 스킬 폴더 밖에 보관하며 업데이트 전 기존 스킬 폴더를 백업한다.
+
+`requirements-optional.txt`(OpenCV)는 필수 패키지를 설치한 뒤 따로 설치한다. `figures=crop`에서 대강 잡은 도형 상자를 도형에 맞추는 데만 쓰며, 설치에 실패하거나 없어도 복원은 동작한다(상자를 적힌 대로 자른다). 필수 목록과 분리한 것은 이 패키지 하나가 실패해도 나머지가 설치되게 하기 위해서다.
+
+## v2.8.3부터의 업데이트
+
+v2.8.3부터는 사용자가 “hwp-exam-restoration 스킬 업데이트해줘”처럼 이 스킬을 가리켜 업데이트를 요청하면, 에이전트가 설치된 스킬 폴더에서 `scripts/update_skill.py`를 실행한다. 이 스크립트는 `acb0808/hwp-exam-restoration`의 최신 GitHub 릴리스만 받는다. 먼저 ZIP 해시를 `SHA256SUMS.txt`와, 파일마다 해시를 `BUNDLE-MANIFEST.json`과 대조한다. 그다음 스킬 폴더를 `%USERPROFILE%\hwp-restoration-backups`에 백업하고 이 사본만 교체한다.
+
+- `.mcp-venv`와 사용자가 넣은 파일은 그대로 둔다. 이전 배포에 있었고 새 배포에 없는 파일만 지운다.
+- `requirements-mcp.txt`가 바뀐 경우에만 `.mcp-venv`에 패키지를 설치한다. 실행 중인 앱이 파일을 잡고 있어 실패하면 앱을 닫고 다시 실행한다.
+- Antigravity 사본(`%USERPROFILE%\.agents\skills` 또는 `%USERPROFILE%\.gemini\config\skills`)이면 역할 정의 6개를 다시 설치하고 스킬의 파일과 바이트 단위로 같은지 확인한다. 다르면 엔진이 전용 타입 대신 일반 에이전트를 쓴다.
+- `--check`는 새 릴리스가 있는지만 알린다. 실패하면 백업으로 자동 복구하고, 끝난 업데이트는 출력의 `rollback` 명령(`--rollback <백업 폴더>`)으로 되돌린다.
+- 업데이트 뒤에는 앱에서 MCP를 재연결해야 새 코드가 실행된다. 다른 앱에 설치된 사본은 그 앱에서 따로 업데이트한다.
+
+v2.8.2 이하에는 이 스크립트가 없으므로, 그 버전에서는 공개 저장소 README의 업데이트 요청문으로 한 번 업데이트한다.
 
 ## 로컬 MCP 연결
 
@@ -74,7 +88,7 @@ OpenCode는 Antigravity와 다른 설정 파일을 사용한다. 위 `install_mc
 
 재검수 상한은 MCP 서버 env의 `HWP_MAX_REREVIEWS`로 정한다(쪽마다 재검수 횟수, 기본 1). 상한을 넘겨 다시 실패한 지적은 수정 회차 없이 `미해결`로 검수 노트에 남는다. 0이면 첫 실패를 바로 노트로 남긴다.
 
-업데이트 후 해당 호스트에서 MCP 서버를 재연결한다. 새 채팅이나 도구 목록 갱신만으로 실행 중 Python 코드가 교체됐다고 판단하지 않는다. 첫 `hwp_prepare` 응답의 `runtime_version=2.8.2`를 확인한다. 별도 상태 조회는 필요 없다. 서버 등록·별도 stdio 검사 성공은 현재 채팅의 연결 갱신을 보장하지 않는다. 제작자는 자기 페이지의 제출·렌더·도형 검수를 직접 MCP로 처리하고 메인은 준비·배정·빌드·최종 검수 기록을 맡는다. 공식 문서가 보장하지 않는 MCP 이름을 custom agent tools에 추정해서 넣지 않는다.
+업데이트 후 해당 호스트에서 MCP 서버를 재연결한다. 새 채팅이나 도구 목록 갱신만으로 실행 중 Python 코드가 교체됐다고 판단하지 않는다. 첫 `hwp_prepare` 응답의 `runtime_version=2.8.3`를 확인한다. 별도 상태 조회는 필요 없다. 서버 등록·별도 stdio 검사 성공은 현재 채팅의 연결 갱신을 보장하지 않는다. 제작자는 자기 페이지의 제출·렌더·도형 검수를 직접 MCP로 처리하고 메인은 준비·배정·빌드·최종 검수 기록을 맡는다. 공식 문서가 보장하지 않는 MCP 이름을 custom agent tools에 추정해서 넣지 않는다.
 
 MCP는 일반 명령 실행이나 Python 파일 읽기를 노출하지 않는다. 호스트의 별도 view_file까지 파일 종류별로 차단하는 보안 경계는 아니므로 담당자 지침도 함께 설치한다. 원본·검수 보고의 실제성은 호스트 실행 기록으로 확인해야 하며, 로컬 영수증만으로 모델의 시각 확인을 증명하지 않는다.
 
@@ -121,3 +135,20 @@ PYTHON scripts/tikz_render.py render examples/tikz-smoke.tex EMPTY_PROBE_DIR
 ```
 
 `doctor`는 자산·동봉 코드·Python 모듈·프로그램 등록 여부를 확인한다. 한글을 실행하거나 문서를 열지 않으므로 실제 출력·폰트·보안 모듈 검증은 별도다. TeX 패키지 검증도 실제 샘플 컴파일이 필요하다. `EMPTY_PROBE_DIR`은 비어 있는 새 출력 폴더로 지정한다.
+
+## 사용자 기본값 (preferences.json)
+
+`~/.hwp-restoration/preferences.json`(환경 변수 `HWP_PREFERENCES`로 다른 경로 지정 가능)에 작업 옵션의 기본값을 둔다. 스킬 폴더 밖이라 재설치해도 남는다. 사용자가 "앞으로 항상 …"이라고 하면 메인이 `hwp_prepare`에 `save_as_default:true`를 주어 엔진이 이 파일을 갱신한다. 손으로 편집해도 된다.
+
+```json
+{"figures": "crop", "review": "answers", "reader_model": "standard",
+ "metadata": {"school": "예시고등학교", "year": "2026"}}
+```
+
+우선순위: 이번 요청에서 말한 값 > 이 파일 > 예전 환경 변수(`HWP_MAX_REREVIEWS`, `HWP_PAGE_IMAGE_MODE`, `HWP_SOURCE_TILES`, `HWP_REVIEW_TILES`) > 스킬 기본값. 잘못된 키나 값은 무시되고 `hwp_prepare` 응답의 `warnings`에 적힌다. 옵션 전체 목록과 기본값은 `scripts/restoration_options.py`의 `DEFAULTS`, 묶음은 `PRESETS`에 있다.
+
+모델 등급(`reader_model`/`reviewer_model` = `standard`/`light`)을 Antigravity 전용 타입으로 쓰려면 등급별 정의도 설치한다(없으면 `self`로 생성되고 `Model` 인자로 등급을 준다):
+
+```
+python scripts/install_reader_agent.py --backup <새 백업 폴더> --agent-name hwp-restoration-reader-standard
+```

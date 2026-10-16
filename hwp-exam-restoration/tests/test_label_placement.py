@@ -91,7 +91,7 @@ class RenderedPlacementTests(unittest.TestCase):
         # 고등학교 시험지 C q19: "$60^\circ$" written as the quote of an angle pic sat on side AB.
         before, shifts, after = placed(r'\coordinate (O) at (0,-1.5);\coordinate (A) at (-1,0.3);\coordinate (B) at (1,0.3);'
                                       r'\draw (A)--(O)--(B)--cycle;'
-                                      r'\pic[draw,angle radius=6mm,angle eccentricity=2.4,"$60^\circ$"] {angle=B--O--A};')
+                                      r'\pic[draw,angle radius=6mm,angle eccentricity=2.8,"$60^\circ$"] {angle=B--O--A};')
         self.assertEqual(before, ['60◦'])
         self.assertEqual(after, [])
 
@@ -283,7 +283,7 @@ class SolverTests(unittest.TestCase):
         plain = single.diagram_document(picture, 40)
         moved = single.diagram_document(picture, 40, shifts={1: (0.5, -1.25)})
         self.assertNotIn('ExamShift1', plain.replace(labels.NODE_HOOK, ''))
-        self.assertIn(r'\expandafter\def\csname ExamShift1\endcsname{0.50mm,-1.25mm}', moved)
+        self.assertIn(r'\expandafter\def\csname ExamShift1\endcsname{{0.50mm/\ExamLabelScale},{-1.25mm/\ExamLabelScale}}', moved)
         self.assertEqual(single.diagram_document(picture, 40, shifts={}), plain)  # an empty table reuses the cached render
         self.assertNotIn('ExamLead', moved)  # the engine draws no pointer from a moved label
         self.assertNotIn('ExamNode', single.diagram_document(picture))  # unfitted documents are left alone

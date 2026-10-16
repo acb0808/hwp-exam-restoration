@@ -151,7 +151,12 @@ def prepare_figures(job, page, rows, output, *, engine=None, dpi=300, reuse_batc
             item = {'id':row['id'], 'question_id':row['question_id'], 'width_mm':row['width_mm'],
                     'reused':False, 'reuse_reason':'not_requested' if reuse_batch is None else 'no_matching_render'}
             try:
-                if 'source' in row:
+                if 'source' in row and str(row['source']).endswith('.crop.json'):
+                    # A figure pasted from the source page (restoration_figure_crop): no TeX, no refit, no reuse.
+                    from restoration_figure_crop import render as crop_render
+                    crop_render(row['source'], out/row['id'], dpi=dpi)
+                    receipt = out/row['id']/'render.json'; item['reuse_reason'] = 'crop'
+                elif 'source' in row:
                     runtime = renderer()
                     conditions = _render_conditions(runtime, renderer_path, row['source'], engine, dpi)
                     prior = previous.get(row['id'], {})
@@ -258,7 +263,9 @@ def review_pack(job, native, output, *, dpi=200):
             png = out/f'page-{number:04d}.png'
             rendered.get_pixmap(dpi=dpi,alpha=False).save(png)
             from restoration_job import compact_page_image
-            compact_page_image(png)
+            from restoration_options import job_options
+            image_mode = job_options(manifest)['image_mode']
+            compact_page_image(png, image_mode)
             crops = []  # Full pages only; enlarge only an observed uncertainty.
             source_number = pages[number-1]['page_number']
             if pages[number-1].get('role')=='answer_sheet':
@@ -271,7 +278,7 @@ def review_pack(job, native, output, *, dpi=200):
                 for later in range(number+1,len(pages)+1):
                     if pages[later-1].get('role')!='answer_sheet_more': continue
                     extra=out/f'page-{later:04d}.png'
-                    doc[later-1].get_pixmap(dpi=dpi,alpha=False).save(extra);compact_page_image(extra)
+                    doc[later-1].get_pixmap(dpi=dpi,alpha=False).save(extra);compact_page_image(extra,image_mode)
                     more.append({'path':str(extra),'sha256':digest(extra)})
                 if more: packet['more_output_images']=more
                 packet['instructions']='마지막 정답표의 번호·객관식 선택지·서답형 소문항·수식·잘림을 검수하세요. answer_reference의 문항과 후보 근거를 읽고 독립 계산으로 정답을 확인하세요. 이미 본 원본은 재사용합니다. 미확정·오답·누락은 failed로 보고하고 해당 담당자의 answer 블록만 수정합니다.'

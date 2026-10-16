@@ -39,8 +39,11 @@ class MCPTransportTests(unittest.TestCase):
         self.assertNotIn('role', schema['properties'])
         self.assertNotIn('native', tools['hwp_build'].inputSchema['properties'])
         self.assertIn('question_pages', tools['hwp_prepare'].inputSchema['properties'])
-        self.assertTrue(tools['hwp_prepare'].inputSchema['properties']['include_answers']['default'])
-        self.assertTrue(tools['hwp_prepare'].inputSchema['properties']['include_figures']['default'])
+        # Unstated stays None so the user's saved defaults can apply (restoration_options).
+        self.assertIsNone(tools['hwp_prepare'].inputSchema['properties']['include_answers']['default'])
+        self.assertIsNone(tools['hwp_prepare'].inputSchema['properties']['include_figures']['default'])
+        self.assertIn('options', tools['hwp_prepare'].inputSchema['properties'])
+        self.assertFalse(tools['hwp_prepare'].inputSchema['properties']['save_as_default']['default'])
         self.assertIn('worker_id', tools['hwp_assign'].inputSchema['properties'])
         self.assertNotIn('worker_a', tools['hwp_assign'].inputSchema['properties'])
         self.assertIn('reviews', tools['hwp_finish_review'].inputSchema['properties'])
@@ -133,19 +136,27 @@ class MCPTransportTests(unittest.TestCase):
         dispatch.assert_called_once_with('assign', {'job': 'job', 'page': 2,
             'worker_id': 'owner-2', 'evidence': 'actual spawn response'})
 
-    def test_answer_sheet_default_and_explicit_opt_out_reach_service(self):
-        for include in (True,False):
+    def test_answer_sheet_unstated_or_explicit_opt_out_reach_service(self):
+        for include in (None,False):
             with patch.object(self.transport,'dispatch',return_value={'status':'prepared'}) as dispatch:
-                kwargs={} if include else {'include_answers':False}
+                kwargs={} if include is None else {'include_answers':False}
                 self.run_async(self.transport.hwp_prepare('source.pdf','job',**kwargs))
-            self.assertEqual(dispatch.call_args.args[1]['include_answers'],include)
+            sent=dispatch.call_args.args[1]
+            self.assertEqual(sent.get('include_answers'),include)
+            self.assertEqual(sent['options'],{})  # present: the engine merges saved defaults
 
-    def test_figures_default_and_text_only_request_reach_service(self):
-        for include in (True,False):
+    def test_figures_unstated_or_text_only_request_reach_service(self):
+        for include in (None,False):
             with patch.object(self.transport,'dispatch',return_value={'status':'prepared'}) as dispatch:
-                kwargs={} if include else {'include_figures':False}
+                kwargs={} if include is None else {'include_figures':False}
                 self.run_async(self.transport.hwp_prepare('source.pdf','job',**kwargs))
-            self.assertEqual(dispatch.call_args.args[1]['include_figures'],include)
+            self.assertEqual(dispatch.call_args.args[1].get('include_figures'),include)
+
+    def test_stated_options_reach_service(self):
+        with patch.object(self.transport,'dispatch',return_value={'status':'prepared'}) as dispatch:
+            self.run_async(self.transport.hwp_prepare('source.pdf','job',options={'review':'off'},save_as_default=True))
+        sent=dispatch.call_args.args[1]
+        self.assertEqual((sent['options'],sent['save_as_default']),({'review':'off'},True))
 
     def test_images_are_native_mcp_blocks_and_not_base64_json(self):
         with tempfile.TemporaryDirectory() as directory:

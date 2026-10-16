@@ -207,10 +207,14 @@ async def _call(action: str, **params) -> CallToolResult:
 
 @mcp.tool(annotations=_annotations('Select question pages'))
 async def hwp_prepare(source: Nonempty, job: Nonempty, dpi: Annotated[int, Field(ge=72, le=600)] | None = None,
-                      question_pages: list[Page] | None = None, include_answers: bool = True,
-                      include_figures: bool = True) -> CallToolResult:
-    """Prepare once. Without question_pages return an overview; repeat with selected question source page numbers without rerendering. Exclude source cover, blank and answer pages. include_answers defaults true: each owner supplies answer blocks and the engine appends the final answer table. include_figures defaults true: figures are restored; pass false only when the user asked for text without figures, then producers transcribe text and equations only. Returns one worker handoff per selected page."""
-    return await _call('prepare', source=source, job=job, dpi=dpi, include_answers=include_answers, include_figures=include_figures,
+                      question_pages: list[Page] | None = None, include_answers: bool | None = None,
+                      include_figures: bool | None = None, options: dict[str, Any] | None = None,
+                      save_as_default: bool = False) -> CallToolResult:
+    """Prepare once. Without question_pages return an overview; repeat with selected question source page numbers without rerendering. Exclude source cover, blank and answer pages. options: only keys the user stated (figures restore/crop/off, figure_check, figure_fix_limit, figure_fallback, answers, review full/answers/off, repair_rounds, review_notes_page, reader_model/reviewer_model inherit/standard/light, preset fast/balanced/quality, ...); the engine merges them over the user's saved defaults and returns effective_options. save_as_default=true stores the stated options for later jobs. include_answers/include_figures are older forms of options.answers/figures. Returns one worker handoff per selected page."""
+    return await _call('prepare', source=source, job=job, dpi=dpi, save_as_default=save_as_default,
+                       **({'include_answers':include_answers} if include_answers is not None else {}),
+                       **({'include_figures':include_figures} if include_figures is not None else {}),
+                       options=options or {},  # present: unstated keys come from the saved defaults (engine-only callers keep the old ones)
                        **({'question_pages':question_pages} if question_pages is not None else {}))
 
 

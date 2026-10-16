@@ -171,5 +171,56 @@ def angle_arc_warnings(tex):
             r'\ExamAngle{A}{B}{C}{라벨}(B가 꼭짓점, 겹호는 [double])로 바꾸세요. 항상 작은 쪽 각에 그려집니다. 원본과 같게 보이면 그대로 둡니다.']
 
 
+HAND_ARROW = re.compile(r'\\draw\s*\[[^\]]*(?:<?-(?:>|\{|\s*(?:stealth|latex|Stealth|Latex)\b)|>\s*=)')
+DEGREE_NODE = re.compile(r'\\node\b[^;]*\{[^{};]*(?:\^\s*\\circ|\^\s*\{\s*\\circ\s*\}|°)[^{};]*\}\s*;')
+
+
+DEGREE = r'(?:\^\s*\\circ|\^\s*\{\s*\\circ\s*\}|°)'
+# An angle value placed by hand: a \node, an inline node or an \ExamLabel whose text is a degree value.
+HAND_VALUE = re.compile(r'(?:\\node\b[^;]*?|\bnode\s*(?:\[[^\]]*\])?\s*|\\ExamLabel\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}\s*)'
+                        r'\{[^{};]*' + DEGREE + r'[^{};]*\}')
+# An unknown angle (x, y, a Greek letter) put by hand beside an \ExamAngle left without a value: a real run drew
+# $x$ for a 2 degree corner with its own \draw[->], which crossed a side of the triangle (2026-10-15).
+HAND_UNKNOWN = re.compile(r'(?:\\node\b[^;]*?|\bnode\s*(?:\[[^\]]*\])?\s*)\{\s*\$\s*(?:[a-z]|\\(?:alpha|beta|gamma|theta|phi))\s*\$\s*\}')
+BARE_ANGLE = re.compile(r'\\ExamAngle\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}\s*\{[^{}]*\}\s*\{[^{}]*\}\s*\{\s*\}')
+
+
+def angle_arrow_warnings(tex):
+    """An angle value placed by hand instead of by \\ExamAngle: with a hand-drawn arrow, the arrow of a real run ended
+    on the arc's end at the arm, not on its middle; without one, hand arcs and values sat across lines or on the
+    wrong angle (a 25 degree hook drawn as a plain line, a 120 degree value as an \\ExamLabel). Said once."""
+    body = _uncommented(tex)
+    values = HAND_VALUE.findall(body)
+    unknown = HAND_UNKNOWN.search(body) and BARE_ANGLE.search(body)
+    if not values and not unknown: return []
+    # Axes (an arrow ending on x, y or t) and two-headed length arrows do not point at a value.
+    pointing = [s + ';' for s in body.split(';') if HAND_ARROW.search(s + ';') and not AXES.search(s + ';')
+                and not re.search(r'\\draw\s*\[[^\]]*<', s)]
+    if not values: return [r'구하는 각(x 등)을 \node와 \draw 화살표로 직접 그렸습니다. \ExamAngle[arrow]{A}{B}{C}{$x$}(B가 꼭짓점) 하나로 '
+                           '쓰고 따로 쓴 \\node와 화살표는 지우세요. 엔진이 값을 선에 겹치지 않게 각 밖에 두고 화살 끝을 호 가운데에 맞춥니다.'] if pointing else []
+    if pointing:
+        return [r'각의 값을 가리키는 화살표를 \draw로 직접 그렸습니다. 값과 화살표는 \ExamAngle[arrow]{A}{B}{C}{$26^\circ$}(B가 꼭짓점) '
+                '하나로 쓰고 따로 쓴 \\node와 화살표는 지우세요. 원본에서 값이 팔 BA 옆에 있으면 [arrow=A]처럼 그 팔의 끝점을 적습니다. '
+                '엔진이 값을 각 밖에 두고 화살 끝을 호 가운데에 맞춥니다. 화살표가 각의 값을 가리키는 것이 아니면 그대로 둡니다.']
+    return [f'각의 값 {len(values)}개를 \\node·\\ExamLabel로 직접 놓았습니다. 각의 값은 \\ExamAngle{{A}}{{B}}{{C}}{{$25^\\circ$}}(B가 꼭짓점)로 '
+            '쓰세요. 엔진이 호를 그리고 값을 호 옆 빈 곳에 둡니다. 원본이 값을 화살표나 갈고리 선으로 가리키면 [arrow](값이 팔 BA 옆이면 [arrow=A]). '
+            '각의 크기가 아닌 값이면 그대로 둡니다.']
+
+
+HAND_CURVE = re.compile(r'\.\.\s*controls\b')
+AXES = re.compile(r'\\ExamAxes\b|\\draw\s*\[[^\]]*->[^\]]*\][^;]*node\s*(?:\[[^\]]*\])?\s*\{\s*\$\s*[xyt]')
+
+
+def graph_curve_warnings(tex):
+    """A function graph drawn with hand-placed Bezier control points: kinks and peaks off the read points in real
+    runs (a derivative graph judged "not a smooth curve", 2026-10-14). Said once."""
+    body = _uncommented(tex)
+    if not HAND_CURVE.search(body) or not AXES.search(body): return []
+    return [r'그래프 곡선을 제어점(.. controls ..)으로 직접 그렸습니다. 원본에서 끝점·x절편·꼭대기·골짜기 좌표를 읽어 '
+            r'\ExamCurve{(x0,y0) (x1,y1) ...}(x가 커지는 순서)로 바꾸세요. 엔진이 꺾임 없이 그리고 꼭대기·골짜기는 그 점에서 수평입니다. '
+            r'축은 \ExamAxes{xmin}{xmax}{ymin}{ymax}, 축 위 이름은 \ExamXLabel{a}{$a$}가 곡선을 피해 놓습니다.']
+
+
 def figure_warnings(tex):
-    return circle_point_warnings(tex) + label_warnings(tex) + angle_arc_warnings(tex)
+    return (circle_point_warnings(tex) + label_warnings(tex) + angle_arc_warnings(tex) + angle_arrow_warnings(tex)
+            + graph_curve_warnings(tex))

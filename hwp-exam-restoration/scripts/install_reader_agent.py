@@ -7,6 +7,10 @@ import os
 import tempfile
 
 
+# Each role, plus its model-tier variants (job options reader_model/reviewer_model = standard/light).
+AGENTS=tuple(f'hwp-restoration-{role}{tier}' for role in ('reader','reviewer') for tier in ('','-standard','-light'))
+
+
 def digest(data):
     return hashlib.sha256(data).hexdigest() if data is not None else None
 
@@ -22,8 +26,8 @@ def atomic(path, data):
 
 
 def run(backup, *, rollback=False, dry=False, agent_name='hwp-restoration-reader'):
-    if agent_name not in ('hwp-restoration-reader','hwp-restoration-reviewer'): raise ValueError('unknown_agent')
-    prefix='reader' if agent_name.endswith('-reader') else 'reviewer'
+    if agent_name not in AGENTS: raise ValueError('unknown_agent')
+    prefix=agent_name.removeprefix('hwp-restoration-')
     source = Path(__file__).resolve().parents[1] / 'agents' / (agent_name+'.md')
     target = Path.home() / '.gemini' / 'config' / 'agents' / (agent_name+'.md')
     target = target.resolve(); backup = Path(backup).resolve()
@@ -59,6 +63,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backup', required=True, type=Path)
     parser.add_argument('--rollback', action='store_true'); parser.add_argument('--dry-run', action='store_true')
-    parser.add_argument('--agent-name',choices=['hwp-restoration-reader','hwp-restoration-reviewer'],default='hwp-restoration-reader')
+    parser.add_argument('--agent-name',choices=list(AGENTS),default='hwp-restoration-reader')
     args = parser.parse_args()
     print(json.dumps(run(args.backup, rollback=args.rollback, dry=args.dry_run,agent_name=args.agent_name), ensure_ascii=False))

@@ -87,7 +87,7 @@ class FittedFigureTests(unittest.TestCase):
         from restoration_figure_geometry import labels_collide
         spec = importlib.util.spec_from_file_location('tr', single.shared.SKILL / 'runtime/tikz_render.py')
         tr = importlib.util.module_from_spec(spec); spec.loader.exec_module(tr)
-        picture = r'\begin{tikzpicture}\draw (0,0) rectangle (6,1);\node at (0,0) {$O$};\node at (0.6,0) {$x$};\end{tikzpicture}'
+        picture = r'\begin{tikzpicture}\draw (0,0) rectangle (6,1);\node at (0,0) {$O$};\node at (0.5,0) {$x$};\end{tikzpicture}'
         with tempfile.TemporaryDirectory() as d:
             found = {}
             for floor in (single.FIT_FREE_SCALE, 1.0):

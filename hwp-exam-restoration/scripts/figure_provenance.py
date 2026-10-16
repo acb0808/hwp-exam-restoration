@@ -70,7 +70,7 @@ def validate_figures(page):
             raise ValueError('tikz_provenance_required: '+qid)
         render=json.loads(artifact(refs['render']).decode('utf-8-sig'))
         review=json.loads(artifact(refs['review']).decode('utf-8-sig'))
-        if (render.get('schema')!='tikz-render/1' or render.get('renderer')!='tikz'
+        if (render.get('schema')!='tikz-render/1' or render.get('renderer') not in ('tikz','crop')
                 or render.get('status')!='rendered_pending_review' or render.get('exit_code')!=0):
             raise ValueError('successful_tikz_render_required: '+qid)
         for key in ('source','pdf','png','log'):artifact(render[key])
@@ -83,6 +83,6 @@ def validate_figures(page):
         checks=review.get('checks',{})
         if not isinstance(checks,dict) or any(checks.get(k)!='passed' for k in ('geometry','labels','marks','source_comparison')):
             raise ValueError('tikz_source_comparison_required: '+qid)
-        verified.append({'page_number':page['page_number'],'question_id':qid,'renderer':'tikz',
+        verified.append({'page_number':page['page_number'],'question_id':qid,'renderer':render['renderer'],
                          'png_sha256':figure['sha256'],'render':refs['render'],'review':refs['review']})
     return verified

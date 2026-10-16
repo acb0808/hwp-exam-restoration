@@ -24,6 +24,8 @@ MCP를 상속하는 제작자다. 첫 프롬프트에 task.md 경로가 있으�
 
 task.md에 `include_figures=false`가 있으면 글과 수식만 옮기는 작업이다: 도형 자리 표시와 TeX를 쓰지 않고 도형 도구를 부르지 않으며, 제출이 accepted면 끝이므로 아래 도형 단계는 건너뛴다.
 
+figure_rules가 '원본 그림 잘라 넣기'(figures=crop)이면 그 규칙만 따르고 아래 1~3단계는 그 규칙이 다시 그리라고 한 도형에만 적용한다.
+
 도형이 있으면 제출 응답(ready_for_figures)의 `figure_rules`를 따른다(별도 파일을 열지 않는다). 원본의 선·점·곡선·라벨·직각·길이 표시를 보존하며 없는 보조선·표식·스캔 crop을 넣지 않는다. 제출이 ready_for_figures이면:
 
 1. 도형마다 배정 폴더에 `ID.tex`(reading.md의 figure ID)를 쓰고 첫 줄에 `% width_mm=NN source_bbox_px=왼쪽,위,폭,높이 labels=A,B,P,8`(원본 페이지에서 그 도형 영역, 그리기 전에 원본만 보고 적은 도형 안 인쇄 라벨 전부)를 적는다. width_mm은 원본에 인쇄된 도형 자체(라벨 포함, 빈 여백 제외)의 폭이다. 라벨은 엔진이 본문 글자 크기로 맞추므로 라벨 크기 때문에 너비를 바꾸지 않는다. 선·원 위의 점과 교점은 좌표를 추정하지 않고 figure_rules대로 계산하며, 문제 글에 나온 점은 같은 이름의 coordinate로 둔다. 여러 도형의 ID.tex는 한 턴에 함께 쓴다(파일 쓰기 도구를 한 번에 여러 개 호출). 그다음 `hwp_render_figures(job,page)`만 호출한다. 엔진이 파일에서 목록을 만든다. LaTeX를 JSON에 넣거나 명령으로 이스케이프하지 않는다.

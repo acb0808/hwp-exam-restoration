@@ -187,7 +187,7 @@ def _manifest(root):
         _artifact(root,previous['result'])
     return value
 
-def prepare(source:Path,job_dir:Path,*,dpi=None,workflow=None)->dict:
+def prepare(source:Path,job_dir:Path,*,dpi=None,workflow=None,image_mode=None)->dict:
     """Snapshot a PDF and render 200dpi pages, or a single image with explicit dpi."""
     source=Path(source).resolve(strict=True);root=Path(job_dir).resolve()
     if root.exists() and any(root.iterdir()):raise ValueError('job_directory_must_be_empty')
@@ -209,7 +209,7 @@ def prepare(source:Path,job_dir:Path,*,dpi=None,workflow=None)->dict:
                 if page.rect.width*page.rect.height*(resolution/72)**2>40_000_000:raise ValueError('page_pixel_limit')
                 path=image_dir/f'page-{index+1:04d}.png'
                 pix=page.get_pixmap(matrix=fitz.Matrix(resolution/72,resolution/72),alpha=False)
-                pix.save(path);compact_page_image(path)
+                pix.save(path);compact_page_image(path,image_mode)
                 pages.append({'page':index+1,'width_mm':page.rect.width*25.4/72,'height_mm':page.rect.height*25.4/72,
                               'image':{'path':path.relative_to(root).as_posix(),'sha256':digest(path)},'dpi':resolution})
     else:
@@ -362,11 +362,11 @@ def revise(job_dir:Path,result:Path)->dict:
     """Accept a worker's explicit same-assignment revision; preserve prior bytes."""
     return accept(job_dir,result,replace=True)
 
-def compact_page_image(path):
-    """Optional 16-level grayscale page image (HWP_PAGE_IMAGE_MODE=gray16): about a third of the RGB bytes,
-    same pixels, thin print strokes kept. Opt-in until measured on each host."""
+def compact_page_image(path,mode=None):
+    """Optional 16-level grayscale page image (job option image_mode=gray16, or HWP_PAGE_IMAGE_MODE=gray16 when the
+    job does not say): about a third of the RGB bytes, same pixels, thin print strokes kept. Opt-in until measured on each host."""
     import os
-    if os.environ.get('HWP_PAGE_IMAGE_MODE')!='gray16':return
+    if (mode or os.environ.get('HWP_PAGE_IMAGE_MODE'))!='gray16':return
     from PIL import Image
     with Image.open(path) as im:gray=im.convert('L')
     gray.quantize(16,dither=Image.Dither.NONE).save(path,optimize=True,bits=4)

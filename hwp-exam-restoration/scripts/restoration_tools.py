@@ -122,7 +122,7 @@ def figure_info(root,manifest,assignment,qid,render_path,*,width_mm,review=None)
     if not isinstance(qid,str) or not qid.strip():raise ValueError('question_id_required')
     if type(width_mm) not in (float,int) or not math.isfinite(width_mm) or width_mm<=0:raise ValueError('positive_finite_width_required')
     render_path=Path(render_path).resolve(strict=True);render=load_json(render_path)
-    if (render.get('schema')!='tikz-render/1' or render.get('renderer')!='tikz' or
+    if (render.get('schema')!='tikz-render/1' or render.get('renderer') not in ('tikz','crop') or
         render.get('status')!='rendered_pending_review' or render.get('exit_code')!=0):raise ValueError('successful_tikz_render_required')
     for key in ('source','pdf','png','log'):artifact(render[key])
     with fitz.open(render['pdf']['path']) as doc:

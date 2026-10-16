@@ -68,10 +68,12 @@ def point_names(text):
 
 
 def preamble(text, shifts=None):
-    """Hook, the picture's point names and the shift table (node number -> (dx, dy) in mm, TikZ y up)."""
-    table = ''.join('\\expandafter\\def\\csname ExamShift%d\\endcsname{%.2fmm,%.2fmm}\n' % (int(n), v[0], v[1])
-                    for n, v in sorted((shifts or {}).items(), key=lambda x: int(x[0])))
-    return NODE_HOOK + '\\def\\ExamPoints{' + ','.join(point_names(text)) + '}\n' + table
+    """Hook, the picture's point names and the shift table (node number -> (dx, dy) in mm, TikZ y up).
+    A node's own scale (\\ExamLabelScale, set for every node) also scales a shift given in its options, so the
+    shift is divided by it: a label asked to move 1 mm moved 0.85 mm."""
+    table = ''.join('\\expandafter\\def\\csname ExamShift%d\\endcsname{{%.2fmm/\\ExamLabelScale},{%.2fmm/\\ExamLabelScale}}\n'
+                    % (int(n), v[0], v[1]) for n, v in sorted((shifts or {}).items(), key=lambda x: int(x[0])))
+    return NODE_HOOK + '\\providecommand{\\ExamLabelScale}{1}\\def\\ExamPoints{' + ','.join(point_names(text)) + '}\n' + table
 
 
 @contextmanager
@@ -372,3 +374,49 @@ def crossed_labels(pdf):
                 if _cost(l['ink'], geo, l['backed'], [m['ink'] for k, m in found.items() if k != n], 0) > CLEAR]
     except Exception:
         return []
+
+
+# A length printed this far from the line it measures no longer reads as that line's length (user, 2026-10-15:
+# "길이나 각도가 너무 멀리 떨어져 있으면 화살표 주거나 경고"). Angle values are kept near their arc by the angle
+# command itself (or led out with an arrow); a hand-placed number has no such guard. In 213 numbers of 122
+# figures of seven runs the farthest stood 2.2 mm from its nearest line.
+FAR_MM = 3.0
+NUMBER = re.compile(r'^[0-9][0-9√.,π]{0,7}$')
+TEX_WORD = re.compile(r'\\[A-Za-z]+|[^0-9A-Za-z]')
+# (A) -- node[...] {4} (B): the label measures the segment between two named points.
+SEGMENT_NODE = re.compile(r"\((\w+'?)\)\s*--\s*node\s*(?:\[[^\]]*\])?\s*\{((?:[^{}]|\{[^{}]*\})*)\}\s*\((\w+'?)\)")
+
+
+def _segment_gap(box, p, q, n=40):
+    return _gap(box, [(p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n) for k in range(n + 1)])
+
+
+def far_lengths(pdf, text=''):
+    """Numbers (not angle values) standing more than FAR_MM from what they measure: [(text, mm, 'AB' or '')].
+    The target is the segment of `(A) -- node {4} (B)` in the producer's TeX when it says so, else the nearest
+    stroke. A number on a length arc (\\ExamLengthArc, white-backed) sits on its arc and is not measured."""
+    try:
+        geo, found = labels(pdf); _, pts = logged(pdf)
+    except Exception:
+        return []
+    targets = {}
+    for a, value, b in SEGMENT_NODE.findall(text or ''):
+        key = TEX_WORD.sub('', value)
+        if key and a in pts and b in pts: targets.setdefault(key, []).append((a, b))
+    strokes = [p for s in geo['segments'] for p in (s['p'], s['q'], ((s['p'][0] + s['q'][0]) / 2, (s['p'][1] + s['q'][1]) / 2))]
+    strokes += [p for s in geo['segments'] for k in range(1, 20) for p in [(s['p'][0] + (s['q'][0] - s['p'][0]) * k / 20, s['p'][1] + (s['q'][1] - s['p'][1]) * k / 20)]]
+    strokes += [p for c in geo['curves'] for p in c['points']]
+    strokes += [p for a in geo['arcs'] for p in _arc_points({'c': a['c'], 'r': a['r'], 'start': a['start'], 'sweep': a['sweep']})]
+    out = []
+    for l in found.values():
+        t = l['text'].replace(' ', '')
+        if l['backed'] or not NUMBER.match(t): continue
+        own = targets.get(re.sub(r'[^0-9A-Za-z]', '', t))
+        if own and len(own) == 1:
+            a, b = own[0]; gap, name = _segment_gap(l['ink'], pts[a], pts[b]), a + b
+        elif strokes:
+            gap, name = _gap(l['ink'], strokes), ''
+        else:
+            continue
+        if gap > FAR_MM: out.append((t, round(gap, 1), name))
+    return out

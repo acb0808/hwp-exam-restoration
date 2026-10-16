@@ -127,7 +127,9 @@ def template_tex(kind,options):
         rows.append(f'\\node[inner sep=0pt,outer sep=0pt,font={{\\fontsize{{10}}{{12}}\\selectfont}}] at ({x:.6f},{y:.6f}) {{$\\mathrm{{{label}}}$}};')
     return '\n'.join(rows)
 
-def expand_templates(text):
+def expand_templates(text,width_mm=None):
+    from restoration_graph_tools import expand_graph_tools
+    text=expand_graph_tools(text,width_mm)  # axes, curves and axis labels of function graphs
     clean=re.sub(r'(?<!\\)%[^\n]*','',text)
     if not re.search(r'\\ExamTemplate\b',clean):return text
     if len(re.findall(r'\\ExamTemplate\b',clean))!=1:raise ValueError('one_template_per_figure_required')

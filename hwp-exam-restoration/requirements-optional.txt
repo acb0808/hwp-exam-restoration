@@ -1,0 +1,2 @@
+# Optional extras, installed after requirements-mcp.txt; the skill works without them.
+opencv-python-headless==5.0.0.93  # fits a rough crop box to the figure (figures=crop); without it the box is used as written

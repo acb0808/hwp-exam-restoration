@@ -160,4 +160,7 @@ def author_help(root, page, topic='writing'):
             'hwp_review_figures는 새 batch_path와 관찰한 reviews를 씁니다. checks의 geometry,labels,marks,source_comparison은 정확히 passed/failed/not_verified입니다.',
             '모든 checks가 passed이고 실제 문제가 없을 때만 status=passed,issues=[]입니다. 변경 없는 검수는 엔진이 재사용합니다.'],
             reference=str(Path(__file__).resolve().parents[1] / 'references/tikz-exam.md'))
+        if (manifest.get('options') or {}).get('figures') == 'crop':
+            # A crop job's producer redraws only figures covered by handwriting; it gets the TikZ rules here.
+            result['tikz_rules'] = (Path(__file__).resolve().parents[1] / 'references/tikz-rules.md').read_text(encoding='utf-8')
     return result
